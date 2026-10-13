@@ -242,14 +242,43 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
 
         let problemStatement = null;
         // The problem statement is unlocked ONLY AFTER check-in by admin!
-        if (team.status === 'checked_in' && team.problem_statement_id) {
-            problemStatement = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(team.problem_statement_id);
+        if (team.status === 'checked_in') {
+            if (!team.problem_statement_id) {
+                // Fair shuffled allocation if missing for checked-in team
+                const activePS = db.prepare(`
+                    SELECT ps.id, COUNT(t.id) as team_count
+                    FROM problem_statements ps
+                    LEFT JOIN teams t ON t.problem_statement_id = ps.id
+                    WHERE ps.is_active = 1
+                    GROUP BY ps.id
+                    ORDER BY team_count ASC
+                `).all();
+
+                if (activePS.length > 0) {
+                    const minCount = activePS[0].team_count;
+                    const pool = activePS.filter(p => p.team_count === minCount);
+                    const chosen = pool[Math.floor(Math.random() * pool.length)] || activePS[0];
+                    const checkinTime = team.checked_in_at || new Date().toISOString();
+                    db.prepare("UPDATE teams SET problem_statement_id = ?, checked_in_at = ? WHERE id = ?")
+                        .run(chosen.id, checkinTime, team.id);
+                    team.problem_statement_id = chosen.id;
+                    team.checked_in_at = checkinTime;
+                }
+            }
+
+            if (team.problem_statement_id) {
+                problemStatement = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(team.problem_statement_id);
+            }
         }
 
-        const announcements = db.prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT 5').all();
+        const announcements = db.prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT 10').all();
+        const schedule = db.prepare('SELECT * FROM schedule WHERE is_active = 1 ORDER BY start_time ASC').all();
         const settingsRows = db.prepare('SELECT * FROM event_settings').all();
         const settings = {};
         settingsRows.forEach(s => { settings[s.key] = s.value; });
+
+        const totalTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
+        const checkedInTeams = db.prepare("SELECT COUNT(*) as count FROM teams WHERE status = 'checked_in'").get().count;
 
         res.json({
             team: {
@@ -269,7 +298,12 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
             problem_statement: problemStatement,
             isCheckedIn: team.status === 'checked_in',
             announcements,
-            settings
+            schedule,
+            settings,
+            event_stats: {
+                totalTeams,
+                checkedInTeams
+            }
         });
     } catch (err) {
         console.error(err);

@@ -626,6 +626,24 @@ function formatDate(datetime) {
     }
 }
 
+function formatDateTime(datetime) {
+    if (!datetime) return '';
+    try {
+        const d = new Date(typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T') ? datetime.replace(' ', 'T') : datetime);
+        return d.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    } catch {
+        return datetime;
+    }
+}
+
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     const icons = {
@@ -902,8 +920,11 @@ function renderTeamDashboard(data) {
                 <div class="ps-unlocked-header">
                     <div>
                         <span class="ps-unlocked-badge"><i class="fas fa-unlock-alt"></i> Problem Statement Unlocked & Active!</span>
-                        <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.4rem;">
-                            <i class="fas fa-calendar-check"></i> Checked in at: <strong>${team.checked_in_at ? formatDate(team.checked_in_at) : 'Active'}</strong>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem;">
+                            <i class="fas fa-calendar-check" style="color: var(--accent-green);"></i> Checked in at: <strong style="color: var(--text-primary);">${team.checked_in_at ? formatDateTime(team.checked_in_at) : 'Active'}</strong>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--accent-orange); margin-top: 0.25rem;">
+                            <i class="fas fa-flag-checkered"></i> 24-Hour Code Freeze Deadline: <strong>${team.checked_in_at ? formatDateTime(new Date(new Date(team.checked_in_at).getTime() + 24 * 60 * 60 * 1000)) : 'Active'}</strong>
                         </div>
                     </div>
                     <div class="countdown-clock" id="teamCountdown">
@@ -913,7 +934,7 @@ function renderTeamDashboard(data) {
 
                 <div class="ps-detail-card" style="margin-bottom: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem;">
-                        <span style="font-family: var(--font-display); font-weight: 700; color: var(--accent-cyan); font-size: 1.1rem;">
+                        <span style="font-family: var(--font-display); font-weight: 700; color: var(--accent-cyan); font-size: 1.15rem;">
                             PS-${String(ps.ps_number || ps.id).padStart(3, '0')}: ${ps.title}
                         </span>
                         <div style="display: flex; gap: 0.5rem;">
@@ -929,14 +950,14 @@ function renderTeamDashboard(data) {
 
                     ${ps.problem_faced ? `
                     <div class="ps-detail-section">
-                        <h5><i class="fas fa-exclamation-triangle"></i> Problem Faced</h5>
+                        <h5><i class="fas fa-exclamation-triangle"></i> Problem Faced & Challenges</h5>
                         <p>${ps.problem_faced}</p>
                     </div>
                     ` : ''}
 
                     ${ps.suggested_solution ? `
                     <div class="ps-detail-section">
-                        <h5><i class="fas fa-lightbulb"></i> Suggested Solution & Guidance</h5>
+                        <h5><i class="fas fa-lightbulb"></i> Suggested Approach & Architecture</h5>
                         <p>${ps.suggested_solution}</p>
                     </div>
                     ` : ''}
@@ -950,11 +971,15 @@ function renderTeamDashboard(data) {
                 <h4 style="font-family: var(--font-display); color: var(--accent-orange); margin-bottom: 0.5rem;">
                     Problem Statement Locked
                 </h4>
-                <p style="color: var(--text-secondary); max-width: 520px; margin: 0 auto 1.25rem; font-size: 0.95rem; line-height: 1.6;">
-                    Your problem statement is safely queued. It will be <strong>shuffled and unlocked automatically</strong> on this screen once the Admin checks in your team at the <strong>V.S.B. Engineering College</strong> registration desk!
+                <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 1.25rem; font-size: 0.95rem; line-height: 1.6;">
+                    Your problem statement is queued. It will be <strong>shuffled and unlocked automatically with your 24-hour timer</strong> as soon as the Admin marks your team as Checked In at the venue desk!
                 </p>
-                <div style="display: inline-flex; align-items: center; gap: 0.6rem; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.1); padding: 0.6rem 1.25rem; border-radius: 8px; font-size: 0.88rem; color: var(--accent-cyan);">
-                    <i class="fas fa-map-marker-alt"></i> Check-in Desk: Main Auditorium, V.S.B. Campus
+                <div style="display: flex; flex-direction: column; gap: 0.4rem; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.08); padding: 0.9rem 1.25rem; border-radius: 8px; font-size: 0.88rem; color: var(--text-secondary); max-width: 560px; margin: 0 auto; text-align: left;">
+                    <div><i class="fas fa-university" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Event:</strong> ${data.settings?.event_name || 'SYNAPSE'} - ${data.settings?.event_tagline || '24-Hour Hackathon'}</div>
+                    <div><i class="fas fa-microchip" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Dept:</strong> ${data.settings?.event_department || 'Department of AI & Data Science'}</div>
+                    <div><i class="fas fa-map-marker-alt" style="color: var(--accent-cyan); width: 20px;"></i> <strong>Venue:</strong> ${data.settings?.event_venue || 'V.S.B Engineering College, Karur'}</div>
+                    <div><i class="fas fa-calendar-check" style="color: var(--accent-green); width: 20px;"></i> <strong>Registered:</strong> ${formatDateTime(team.registered_at)}</div>
+                    <div><i class="fas fa-envelope" style="color: var(--accent-orange); width: 20px;"></i> <strong>Contact:</strong> ${data.settings?.contact_email || 'synapse@vsb.edu.in'} | ${data.settings?.contact_phone || '+91 98765 43210'}</div>
                 </div>
             </div>
         `}
@@ -962,7 +987,7 @@ function renderTeamDashboard(data) {
         <!-- Team Roster -->
         <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
             <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-users"></i> Registered Team Members (${data.members.length})
+                <i class="fas fa-users" style="color: var(--accent-secondary);"></i> Registered Team Members (${data.members.length})
             </h5>
             <div style="overflow-x: auto;">
                 <table class="team-members-table">
@@ -991,6 +1016,57 @@ function renderTeamDashboard(data) {
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- Live Announcements from Admin -->
+        <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
+            <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-bullhorn" style="color: var(--accent-cyan);"></i> Live Hackathon Updates (${(data.announcements || []).length})
+            </h5>
+            ${(data.announcements && data.announcements.length > 0) ? `
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    ${data.announcements.map(a => `
+                        <div style="background: rgba(10,10,20,0.5); border-left: 3px solid ${a.priority === 'urgent' ? 'var(--accent-red)' : a.priority === 'high' ? 'var(--accent-orange)' : 'var(--accent-cyan)'}; padding: 0.75rem 1rem; border-radius: 6px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <strong style="color: var(--text-primary); font-size: 0.9rem;">${a.title}</strong>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);"><i class="fas fa-clock"></i> ${formatDateTime(a.created_at)}</span>
+                            </div>
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">${a.message}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : `
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fas fa-info-circle"></i> No announcements posted yet. Real-time updates from organizers will appear here.</p>
+            `}
+        </div>
+
+        <!-- Event Timeline & Milestones -->
+        <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
+            <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-calendar-alt" style="color: var(--accent-secondary);"></i> 24-Hour Event Schedule & Milestones
+            </h5>
+            ${(data.schedule && data.schedule.length > 0) ? `
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem;">
+                    ${data.schedule.map(s => {
+                        const startTime = formatTime(s.start_time);
+                        const endTime = s.end_time ? formatTime(s.end_time) : '';
+                        const timeStr = endTime ? `${startTime} - ${endTime}` : startTime;
+                        return `
+                        <div style="background: rgba(10,10,20,0.5); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+                                <span class="event-type-badge badge-${s.event_type}" style="font-size: 0.65rem; padding: 0.15rem 0.5rem;">${s.event_type}</span>
+                                <span style="font-size: 0.75rem; color: var(--accent-cyan); font-family: var(--font-mono);">${timeStr}</span>
+                            </div>
+                            <strong style="display: block; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.2rem;">${s.title}</strong>
+                            ${s.description ? `<p style="margin: 0 0 0.3rem 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">${s.description}</p>` : ''}
+                            <span style="font-size: 0.72rem; color: var(--text-muted); display: block;"><i class="fas fa-map-marker-alt"></i> ${s.location || 'Venue'}</span>
+                        </div>
+                        `;
+                    }).join('')}
+                </div>
+            ` : `
+                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Schedule details will appear here.</p>
+            `}
         </div>
 
         <!-- Project Submission Area -->
