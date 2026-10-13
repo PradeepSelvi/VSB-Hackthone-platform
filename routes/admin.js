@@ -6,6 +6,30 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper to fairly shuffle and allocate problem statement to a team
+function allocateShuffledProblemStatement(db, currentPsId) {
+    const activeStatements = db.prepare(`
+        SELECT ps.id, COUNT(t.id) as team_count
+        FROM problem_statements ps
+        LEFT JOIN teams t ON t.problem_statement_id = ps.id
+        WHERE ps.is_active = 1
+        GROUP BY ps.id
+        ORDER BY team_count ASC
+    `).all();
+
+    if (activeStatements.length === 0) return null;
+
+    // Pick among least-allocated problem statements for fair distribution
+    const minCount = activeStatements[0].team_count;
+    let pool = activeStatements.filter(ps => ps.team_count === minCount);
+    if (pool.length > 1 && currentPsId) {
+        const filtered = pool.filter(ps => ps.id !== currentPsId);
+        if (filtered.length > 0) pool = filtered;
+    }
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    return chosen ? chosen.id : activeStatements[0].id;
+}
+
 // Admin Login
 router.post('/login', (req, res) => {
     try {
@@ -57,7 +81,7 @@ router.get('/stats', authenticateToken, (req, res) => {
         const collegeStats = db.prepare(`
             SELECT college, COUNT(DISTINCT tm.team_id) as teams, COUNT(*) as members
             FROM team_members tm
-            GROUP BY college
+            GROUP BY college 
             ORDER BY teams DESC
         `).all();
 
@@ -71,12 +95,12 @@ router.get('/stats', authenticateToken, (req, res) => {
 
         // Problem statement selection stats
         const psStats = db.prepare(`
-            SELECT ps.title, ps.category, COUNT(t.id) as team_count
+            SELECT ps.ps_number, ps.title, ps.category, COUNT(t.id) as team_count
             FROM problem_statements ps
             LEFT JOIN teams t ON t.problem_statement_id = ps.id
             WHERE ps.is_active = 1
             GROUP BY ps.id
-            ORDER BY team_count DESC
+            ORDER BY team_count DESC, ps.ps_number ASC
         `).all();
 
         // Registration timeline (last 30 days)
@@ -122,7 +146,7 @@ router.get('/teams', authenticateToken, (req, res) => {
         const { status, search } = req.query;
 
         let query = `
-            SELECT t.*, ps.title as problem_statement_title
+            SELECT t.*, ps.ps_number, ps.title as problem_statement_title, ps.category as problem_statement_category
             FROM teams t
             LEFT JOIN problem_statements ps ON t.problem_statement_id = ps.id
         `;
@@ -134,8 +158,8 @@ router.get('/teams', authenticateToken, (req, res) => {
             params.push(status);
         }
         if (search) {
-            conditions.push('(t.team_name LIKE ? OR t.team_lead_email LIKE ?)');
-            params.push(`%${search}%`, `%${search}%`);
+            conditions.push('(t.team_name LIKE ? OR t.team_lead_email LIKE ? OR t.team_code LIKE ?)');
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
@@ -145,7 +169,7 @@ router.get('/teams', authenticateToken, (req, res) => {
         const teams = db.prepare(query).all(...params);
 
         // Get members for each team
-        const getMembers = db.prepare('SELECT * FROM team_members WHERE team_id = ?');
+        const getMembers = db.prepare('SELECT * FROM team_members WHERE team_id = ? ORDER BY is_leader DESC, id ASC');
         const result = teams.map(team => ({
             ...team,
             members: getMembers.all(team.id)
@@ -157,7 +181,7 @@ router.get('/teams', authenticateToken, (req, res) => {
     }
 });
 
-// Update team status
+// Update team status (with automatic problem statement shuffle on check-in)
 router.patch('/teams/:id/status', authenticateToken, (req, res) => {
     try {
         const { status } = req.body;
@@ -165,10 +189,93 @@ router.patch('/teams/:id/status', authenticateToken, (req, res) => {
             return res.status(400).json({ error: 'Invalid status' });
         }
         const db = getDb();
-        db.prepare('UPDATE teams SET status = ? WHERE id = ?').run(status, req.params.id);
-        res.json({ message: 'Status updated' });
+        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+        if (!team) return res.status(404).json({ error: 'Team not found' });
+
+        let assignedPsId = team.problem_statement_id;
+        let checkedInAt = team.checked_in_at;
+
+        if (status === 'checked_in') {
+            if (!checkedInAt) {
+                checkedInAt = new Date().toISOString();
+            }
+            if (!assignedPsId) {
+                assignedPsId = allocateShuffledProblemStatement(db, null);
+            }
+        }
+
+        db.prepare('UPDATE teams SET status = ?, problem_statement_id = ?, checked_in_at = ? WHERE id = ?')
+            .run(status, assignedPsId, checkedInAt, req.params.id);
+
+        res.json({
+            message: 'Status updated successfully',
+            status,
+            problem_statement_id: assignedPsId,
+            checked_in_at: checkedInAt
+        });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Single-click Check-in for team (with shuffle & timestamp)
+router.post('/teams/:id/checkin', authenticateToken, (req, res) => {
+    try {
+        const db = getDb();
+        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+        if (!team) return res.status(404).json({ error: 'Team not found' });
+
+        const checkedInAt = new Date().toISOString();
+        let assignedPsId = team.problem_statement_id;
+
+        if (!assignedPsId) {
+            assignedPsId = allocateShuffledProblemStatement(db, null);
+        }
+
+        db.prepare("UPDATE teams SET status = 'checked_in', problem_statement_id = ?, checked_in_at = ? WHERE id = ?")
+            .run(assignedPsId, checkedInAt, req.params.id);
+
+        const assignedPS = assignedPsId ? db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(assignedPsId) : null;
+
+        res.json({
+            message: `Team ${team.team_code} checked in successfully!`,
+            status: 'checked_in',
+            checked_in_at: checkedInAt,
+            problem_statement: assignedPS
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error during check-in' });
+    }
+});
+
+// Re-shuffle or assign problem statement to a team
+router.post('/teams/:id/shuffle-ps', authenticateToken, (req, res) => {
+    try {
+        const db = getDb();
+        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+        if (!team) return res.status(404).json({ error: 'Team not found' });
+
+        const { problem_statement_id } = req.body;
+        let newPsId;
+
+        if (problem_statement_id) {
+            newPsId = parseInt(problem_statement_id);
+        } else {
+            newPsId = allocateShuffledProblemStatement(db, team.problem_statement_id);
+        }
+
+        db.prepare('UPDATE teams SET problem_statement_id = ? WHERE id = ?').run(newPsId, req.params.id);
+        const assignedPS = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(newPsId);
+
+        res.json({
+            message: `Problem statement assigned to team ${team.team_code}!`,
+            problem_statement: assignedPS
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error assigning problem statement' });
     }
 });
 
@@ -187,7 +294,7 @@ router.delete('/teams/:id', authenticateToken, (req, res) => {
 router.get('/problem-statements', authenticateToken, (req, res) => {
     try {
         const db = getDb();
-        const ps = db.prepare('SELECT * FROM problem_statements ORDER BY created_at DESC').all();
+        const ps = db.prepare('SELECT * FROM problem_statements ORDER BY ps_number ASC, created_at DESC').all();
         res.json(ps);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -196,12 +303,16 @@ router.get('/problem-statements', authenticateToken, (req, res) => {
 
 router.post('/problem-statements', authenticateToken, (req, res) => {
     try {
-        const { title, description, category, difficulty } = req.body;
+        const { title, description, category, difficulty, problem_faced, suggested_solution } = req.body;
         if (!title || !description || !category) {
             return res.status(400).json({ error: 'Title, description, and category are required' });
         }
         const db = getDb();
-        const result = db.prepare('INSERT INTO problem_statements (title, description, category, difficulty) VALUES (?, ?, ?, ?)').run(title, description, category, difficulty || 'medium');
+        const maxNum = db.prepare('SELECT MAX(ps_number) as maxNum FROM problem_statements').get().maxNum || 0;
+        const result = db.prepare(`
+            INSERT INTO problem_statements (ps_number, title, description, problem_faced, suggested_solution, category, difficulty)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(maxNum + 1, title, description, problem_faced || '', suggested_solution || '', category, difficulty || 'medium');
         res.json({ id: result.lastInsertRowid, message: 'Problem statement created' });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -210,9 +321,13 @@ router.post('/problem-statements', authenticateToken, (req, res) => {
 
 router.put('/problem-statements/:id', authenticateToken, (req, res) => {
     try {
-        const { title, description, category, difficulty, is_active } = req.body;
+        const { title, description, category, difficulty, problem_faced, suggested_solution, is_active } = req.body;
         const db = getDb();
-        db.prepare('UPDATE problem_statements SET title = ?, description = ?, category = ?, difficulty = ?, is_active = ? WHERE id = ?').run(title, description, category, difficulty, is_active ? 1 : 0, req.params.id);
+        db.prepare(`
+            UPDATE problem_statements 
+            SET title = ?, description = ?, problem_faced = ?, suggested_solution = ?, category = ?, difficulty = ?, is_active = ? 
+            WHERE id = ?
+        `).run(title, description, problem_faced || '', suggested_solution || '', category, difficulty, is_active ? 1 : 0, req.params.id);
         res.json({ message: 'Problem statement updated' });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -222,6 +337,8 @@ router.put('/problem-statements/:id', authenticateToken, (req, res) => {
 router.delete('/problem-statements/:id', authenticateToken, (req, res) => {
     try {
         const db = getDb();
+        // Nullify foreign keys in teams first
+        db.prepare('UPDATE teams SET problem_statement_id = NULL WHERE problem_statement_id = ?').run(req.params.id);
         db.prepare('DELETE FROM problem_statements WHERE id = ?').run(req.params.id);
         res.json({ message: 'Problem statement deleted' });
     } catch (err) {
@@ -355,32 +472,34 @@ router.get('/export/teams', authenticateToken, (req, res) => {
     try {
         const db = getDb();
         const teams = db.prepare(`
-            SELECT t.id, t.team_name, t.team_lead_email, t.team_size, t.status, t.registered_at,
-                   ps.title as problem_statement
+            SELECT t.id, t.team_code, t.team_name, t.team_lead_email, t.team_size, t.status, 
+                   t.registered_at, t.checked_in_at, t.project_repo, t.project_demo,
+                   ps.ps_number, ps.title as problem_statement, ps.category as ps_category
             FROM teams t
             LEFT JOIN problem_statements ps ON t.problem_statement_id = ps.id
             ORDER BY t.registered_at DESC
         `).all();
 
         const members = db.prepare(`
-            SELECT tm.*, t.team_name
+            SELECT tm.*, t.team_name, t.team_code
             FROM team_members tm
             JOIN teams t ON tm.team_id = t.id
             ORDER BY t.id, tm.is_leader DESC
         `).all();
 
         // CSV header
-        let csv = 'Team Name,Team Lead Email,Team Size,Status,Problem Statement,Registered At,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
+        let csv = 'Team ID,Team Name,Team Lead Email,Team Size,Status,Problem Statement Number,Problem Statement,Category,Registered At,Checked In At,Project Repo,Project Demo,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
 
         members.forEach(m => {
             const team = teams.find(t => t.id === m.team_id);
-            csv += `"${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.problem_statement || 'Not Selected'}","${team.registered_at}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
+            csv += `"${team.team_code || ''}","${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.ps_number || ''}","${team.problem_statement || 'Pending Check-in'}","${team.ps_category || ''}","${team.registered_at || ''}","${team.checked_in_at || ''}","${team.project_repo || ''}","${team.project_demo || ''}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename=synapse_teams_export.csv');
         res.send(csv);
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
 });

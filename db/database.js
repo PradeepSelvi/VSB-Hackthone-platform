@@ -22,6 +22,69 @@ function getDb() {
     return db;
 }
 
+// Function to parse problem statements from vsb_hackathon_ps.md
+function parseProblemStatementsFromMarkdown() {
+    const psFile = path.join(__dirname, '..', 'vsb_hackathon_ps.md');
+    if (!fs.existsSync(psFile)) return [];
+
+    const content = fs.readFileSync(psFile, 'utf-8');
+    const regex = /#\s*(\d+)\\\.\s*([^\r\n]+)([\s\S]*?)(?=(?:#\s*\d+\\\.)|$)/g;
+    let match;
+    const statements = [];
+
+    const categories = {
+        1: { category: 'FinTech & AI', difficulty: 'medium' },
+        2: { category: 'FinTech & Cybersecurity', difficulty: 'hard' },
+        3: { category: 'FinTech & Personalization', difficulty: 'medium' },
+        4: { category: 'Open Banking & API Ecosystems', difficulty: 'medium' },
+        5: { category: 'Payments Modernisation', difficulty: 'medium' },
+        6: { category: 'InsurTech & Automated Underwriting', difficulty: 'hard' },
+        7: { category: 'InsurTech & Claims Processing', difficulty: 'medium' },
+        8: { category: 'InsurTech & IoT Telematics', difficulty: 'medium' },
+        9: { category: 'InsurTech & Embedded Finance', difficulty: 'medium' },
+        10: { category: 'ClimateTech & Catastrophe Risk', difficulty: 'hard' },
+        11: { category: 'HealthTech & Prior Authorisation', difficulty: 'hard' },
+        12: { category: 'HealthTech & Clinical Speech NLP', difficulty: 'medium' },
+        13: { category: 'HealthTech & FHIR Interoperability', difficulty: 'hard' },
+        14: { category: 'HealthTech & Predictive AI', difficulty: 'hard' },
+        15: { category: 'HealthTech & Value-Based Analytics', difficulty: 'medium' },
+        16: { category: 'AI Mesh Networks & Disaster Response', difficulty: 'hard' },
+        17: { category: 'Computer Vision & Accessibility (ISL)', difficulty: 'hard' },
+        18: { category: 'LegalTech & Contract Risk Copilot', difficulty: 'hard' },
+        19: { category: 'Enterprise AI & Multi-Source RAG', difficulty: 'hard' },
+        20: { category: 'GovTech & Multilingual Grievance NLP', difficulty: 'medium' },
+        21: { category: 'Public Health & Spatial Outbreak Analytics', difficulty: 'hard' },
+        22: { category: 'Blockchain & Pharmaceutical Supply Chain', difficulty: 'hard' },
+        23: { category: 'Cybersecurity & AI Agent Defense', difficulty: 'hard' },
+        24: { category: 'Digital Forensics & Evidence Integrity', difficulty: 'hard' },
+        25: { category: 'Smart Mobility & Usage-Based Insurance', difficulty: 'medium' }
+    };
+
+    while ((match = regex.exec(content)) !== null) {
+        const num = parseInt(match[1]);
+        const title = match[2].trim();
+        const body = match[3];
+
+        const psMatch = body.match(/##\s*Problem Statement\s*([\s\S]*?)(?=##\s*Problem Faced|$)/i);
+        const pfMatch = body.match(/##\s*Problem Faced\s*([\s\S]*?)(?=##\s*Suggested Solution|$)/i);
+        const ssMatch = body.match(/##\s*Suggested Solution\s*([\s\S]*?)$/i);
+
+        const meta = categories[num] || { category: 'Artificial Intelligence', difficulty: 'medium' };
+
+        statements.push({
+            ps_number: num,
+            title,
+            description: psMatch ? psMatch[1].trim() : '',
+            problem_faced: pfMatch ? pfMatch[1].trim() : '',
+            suggested_solution: ssMatch ? ssMatch[1].trim() : '',
+            category: meta.category,
+            difficulty: meta.difficulty
+        });
+    }
+
+    return statements;
+}
+
 function initializeDatabase() {
     const db = getDb();
 
@@ -36,15 +99,35 @@ function initializeDatabase() {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Problem statements table
+        CREATE TABLE IF NOT EXISTS problem_statements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ps_number INTEGER,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            problem_faced TEXT,
+            suggested_solution TEXT,
+            category TEXT NOT NULL,
+            difficulty TEXT DEFAULT 'medium' CHECK(difficulty IN ('easy', 'medium', 'hard')),
+            is_active INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
         -- Teams table
         CREATE TABLE IF NOT EXISTS teams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_code TEXT UNIQUE,
             team_name TEXT NOT NULL,
             team_lead_email TEXT NOT NULL,
             team_size INTEGER NOT NULL CHECK(team_size >= 2 AND team_size <= 4),
+            password TEXT DEFAULT 'Syanp2K26',
             problem_statement_id INTEGER,
             status TEXT DEFAULT 'registered' CHECK(status IN ('registered', 'approved', 'rejected', 'checked_in')),
             registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            checked_in_at DATETIME,
+            project_repo TEXT,
+            project_demo TEXT,
+            submission_notes TEXT,
             FOREIGN KEY (problem_statement_id) REFERENCES problem_statements(id)
         );
 
@@ -60,17 +143,6 @@ function initializeDatabase() {
             college TEXT NOT NULL,
             is_leader INTEGER DEFAULT 0,
             FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
-        );
-
-        -- Problem statements table
-        CREATE TABLE IF NOT EXISTS problem_statements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL,
-            category TEXT NOT NULL,
-            difficulty TEXT DEFAULT 'medium' CHECK(difficulty IN ('easy', 'medium', 'hard')),
-            is_active INTEGER DEFAULT 1,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
         -- Announcements table
@@ -102,6 +174,35 @@ function initializeDatabase() {
             value TEXT NOT NULL
         );
     `);
+
+    // Migrations for existing SQLite database files (safe alter columns)
+    const migrations = [
+        `ALTER TABLE teams ADD COLUMN team_code TEXT;`,
+        `ALTER TABLE teams ADD COLUMN password TEXT DEFAULT 'Syanp2K26';`,
+        `ALTER TABLE teams ADD COLUMN checked_in_at DATETIME;`,
+        `ALTER TABLE teams ADD COLUMN project_repo TEXT;`,
+        `ALTER TABLE teams ADD COLUMN project_demo TEXT;`,
+        `ALTER TABLE teams ADD COLUMN submission_notes TEXT;`,
+        `ALTER TABLE problem_statements ADD COLUMN ps_number INTEGER;`,
+        `ALTER TABLE problem_statements ADD COLUMN problem_faced TEXT;`,
+        `ALTER TABLE problem_statements ADD COLUMN suggested_solution TEXT;`
+    ];
+
+    for (const sql of migrations) {
+        try {
+            db.exec(sql);
+        } catch (e) {
+            // Column already exists or table has constraint - safe to ignore
+        }
+    }
+
+    // Backfill team_code for any existing teams
+    const teamsWithoutCode = db.prepare("SELECT id FROM teams WHERE team_code IS NULL OR team_code = ''").all();
+    const updateTeamCode = db.prepare('UPDATE teams SET team_code = ? WHERE id = ?');
+    for (const t of teamsWithoutCode) {
+        const code = 'SYN' + String(t.id).padStart(3, '0');
+        updateTeamCode.run(code, t.id);
+    }
 
     // Seed default admin
     const adminExists = db.prepare('SELECT COUNT(*) as count FROM admins').get();
@@ -135,20 +236,63 @@ function initializeDatabase() {
         }
     }
 
-    // Seed sample problem statements
-    const psExist = db.prepare('SELECT COUNT(*) as count FROM problem_statements').get();
-    if (psExist.count === 0) {
-        const samplePS = [
-            ['Smart Campus Navigation', 'Build an AI-powered campus navigation system that helps students and visitors find classrooms, labs, and facilities using indoor positioning.', 'AI/ML', 'medium'],
-            ['Student Mental Health Companion', 'Create a conversational AI chatbot that provides mental health support, stress management tips, and connects students with counselors.', 'Healthcare', 'hard'],
-            ['Waste Management Optimizer', 'Develop a smart waste management system using IoT data to optimize collection routes and promote recycling in urban areas.', 'Sustainability', 'medium'],
-            ['Rural Education Platform', 'Design an offline-first educational platform that delivers quality learning content to students in areas with limited internet connectivity.', 'Education', 'easy'],
-            ['Traffic Flow Predictor', 'Build a real-time traffic prediction system using historical data and live feeds to suggest optimal routes and reduce congestion.', 'Smart City', 'hard'],
-            ['Crop Disease Detection', 'Develop a mobile application that uses computer vision to identify crop diseases from leaf images and suggest treatments.', 'Agriculture', 'medium'],
-        ];
-        const insertPS = db.prepare('INSERT INTO problem_statements (title, description, category, difficulty) VALUES (?, ?, ?, ?)');
-        for (const ps of samplePS) {
-            insertPS.run(...ps);
+    // Seed real Problem Statements from vsb_hackathon_ps.md (removing old mock problem statements)
+    const mockCheck = db.prepare("SELECT COUNT(*) as count FROM problem_statements WHERE title = 'Smart Campus Navigation'").get();
+    const psCount = db.prepare('SELECT COUNT(*) as count FROM problem_statements').get().count;
+
+    if (mockCheck.count > 0 || psCount < 20) {
+        console.log('🔄 Loading official VSB Hackathon problem statements from vsb_hackathon_ps.md...');
+        const parsedPS = parseProblemStatementsFromMarkdown();
+
+        if (parsedPS.length > 0) {
+            // Nullify any team references to old mock statements first to satisfy foreign key constraints
+            db.prepare(`
+                UPDATE teams SET problem_statement_id = NULL 
+                WHERE problem_statement_id IN (
+                    SELECT id FROM problem_statements 
+                    WHERE title IN ('Smart Campus Navigation', 'Student Mental Health Companion', 'Waste Management Optimizer', 'Rural Education Platform', 'Traffic Flow Predictor', 'Crop Disease Detection')
+                )
+            `).run();
+
+            // Remove old mock statements
+            db.prepare("DELETE FROM problem_statements WHERE title IN ('Smart Campus Navigation', 'Student Mental Health Companion', 'Waste Management Optimizer', 'Rural Education Platform', 'Traffic Flow Predictor', 'Crop Disease Detection')").run();
+
+            const insertPS = db.prepare(`
+                INSERT INTO problem_statements (ps_number, title, description, problem_faced, suggested_solution, category, difficulty, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            `);
+
+            const existingTitles = new Set(db.prepare('SELECT title FROM problem_statements').all().map(p => p.title));
+
+            for (const ps of parsedPS) {
+                if (!existingTitles.has(ps.title)) {
+                    insertPS.run(
+                        ps.ps_number,
+                        ps.title,
+                        ps.description,
+                        ps.problem_faced,
+                        ps.suggested_solution,
+                        ps.category,
+                        ps.difficulty
+                    );
+                } else {
+                    // Update existing with rich fields
+                    db.prepare(`
+                        UPDATE problem_statements 
+                        SET ps_number = ?, description = ?, problem_faced = ?, suggested_solution = ?, category = ?, difficulty = ?
+                        WHERE title = ?
+                    `).run(
+                        ps.ps_number,
+                        ps.description,
+                        ps.problem_faced,
+                        ps.suggested_solution,
+                        ps.category,
+                        ps.difficulty,
+                        ps.title
+                    );
+                }
+            }
+            console.log(`✅ Loaded ${parsedPS.length} official VSB problem statements!`);
         }
     }
 
@@ -156,17 +300,18 @@ function initializeDatabase() {
     const scheduleExist = db.prepare('SELECT COUNT(*) as count FROM schedule').get();
     if (scheduleExist.count === 0) {
         const sampleSchedule = [
-            ['Registration & Check-in', 'Teams arrive and complete registration', '2026-11-15 08:00', '2026-11-15 09:00', 'Main Auditorium', 'general'],
-            ['Inaugural Ceremony', 'Opening ceremony with chief guest address', '2026-11-15 09:00', '2026-11-15 10:00', 'Main Auditorium', 'ceremony'],
-            ['Hacking Begins!', 'The 24-hour hackathon officially starts', '2026-11-15 10:00', '2026-11-16 10:00', 'Innovation Lab', 'general'],
-            ['Mentoring Session 1', 'Industry mentors available for guidance', '2026-11-15 12:00', '2026-11-15 13:00', 'Seminar Hall', 'workshop'],
-            ['Lunch Break', 'Lunch provided for all participants', '2026-11-15 13:00', '2026-11-15 14:00', 'Cafeteria', 'break'],
-            ['Mentoring Session 2', 'Technical mentoring and code reviews', '2026-11-15 17:00', '2026-11-15 18:00', 'Seminar Hall', 'workshop'],
-            ['Dinner Break', 'Dinner provided for all participants', '2026-11-15 20:00', '2026-11-15 21:00', 'Cafeteria', 'break'],
-            ['Midnight Snacks', 'Energy boost for late-night hackers', '2026-11-16 00:00', '2026-11-16 00:30', 'Cafeteria', 'break'],
-            ['Submission Deadline', 'All projects must be submitted', '2026-11-16 10:00', '2026-11-16 10:30', 'Innovation Lab', 'general'],
-            ['Project Presentations', 'Teams present their solutions to judges', '2026-11-16 10:30', '2026-11-16 13:00', 'Main Auditorium', 'judging'],
-            ['Valedictory & Prize Distribution', 'Closing ceremony and winner announcements', '2026-11-16 14:00', '2026-11-16 15:30', 'Main Auditorium', 'ceremony'],
+            ['Registration & Check-in Desk', 'Teams arrive at VSB campus, complete badge collection & get assigned problem statement with countdown start', '2026-11-15 08:00', '2026-11-15 09:30', 'Main Auditorium', 'general'],
+            ['Inaugural Ceremony', 'Opening ceremony by Department of AI & DS with chief guest address', '2026-11-15 09:30', '2026-11-15 10:00', 'Main Auditorium', 'ceremony'],
+            ['Hacking Begins (24-Hour Clock Starts)', 'The 24-hour hackathon timer officially commences for all teams', '2026-11-15 10:00', '2026-11-16 10:00', 'AI & DS Innovation Labs', 'general'],
+            ['Mentoring Round 1: Architecture Review', 'Industry mentors and faculty review project architecture and datasets', '2026-11-15 12:30', '2026-11-15 14:00', 'Hackathon Labs', 'workshop'],
+            ['Networking Lunch Break', 'Lunch provided for all participants and mentors', '2026-11-15 14:00', '2026-11-15 15:00', 'Campus Cafeteria', 'break'],
+            ['Mentoring Round 2: Tech Checkpoint', 'Midway evaluation of model accuracy, UI prototypes, and code repository', '2026-11-15 18:00', '2026-11-15 20:00', 'Hackathon Labs', 'workshop'],
+            ['Dinner & Recharge', 'Dinner provided for all participants', '2026-11-15 20:30', '2026-11-15 21:30', 'Campus Cafeteria', 'break'],
+            ['Midnight Hack & Energy Fuel', 'Midnight snacks, coffee and energy boosts for overnight hacking', '2026-11-16 00:00', '2026-11-16 01:00', 'Labs & Cafeteria', 'break'],
+            ['Breakfast & Final Code Polish', 'Morning refreshments, testing edge cases and preparing presentation pitch', '2026-11-16 07:30', '2026-11-16 08:30', 'Cafeteria', 'break'],
+            ['Code Freeze & Submission Deadline', 'All repositories and demo links submitted via the Team Dashboard', '2026-11-16 10:00', '2026-11-16 10:15', 'Team Portal', 'general'],
+            ['Grand Jury Presentations & Demos', 'Teams present their working solutions to industry judges', '2026-11-16 10:30', '2026-11-16 13:30', 'Auditorium & Labs', 'judging'],
+            ['Valedictory Ceremony & Prize Distribution', 'Announcement of cash prizes, trophies, certificates and closing ceremony', '2026-11-16 14:30', '2026-11-16 16:00', 'Main Auditorium', 'ceremony'],
         ];
         const insertSchedule = db.prepare('INSERT INTO schedule (title, description, start_time, end_time, location, event_type) VALUES (?, ?, ?, ?, ?, ?)');
         for (const s of sampleSchedule) {

@@ -1,6 +1,6 @@
 /* ================================================
-   SYNAPSE - Admin Panel JavaScript
-   ================================================ */
+  SYNAPSE - Admin Panel JavaScript
+  ================================================ */
 
 const API_BASE = '/api/admin';
 let token = localStorage.getItem('synapse_admin_token');
@@ -78,7 +78,7 @@ async function apiCall(url, method = 'GET', body = null) {
         }
     };
     if (body) opts.body = JSON.stringify(body);
-    
+
     const res = await fetch(url, opts);
     if (res.status === 401 || res.status === 403) {
         logout();
@@ -279,7 +279,7 @@ async function loadTeams() {
     try {
         const status = document.getElementById('teamStatusFilter')?.value || 'all';
         const search = document.getElementById('teamSearch')?.value || '';
-        
+
         const res = await apiCall(`${API_BASE}/teams?status=${status}&search=${encodeURIComponent(search)}`);
         allTeams = await res.json();
         renderTeams(allTeams);
@@ -299,29 +299,46 @@ function renderTeams(teams) {
         return;
     }
 
-    container.innerHTML = teams.map(team => `
+    container.innerHTML = teams.map(team => {
+        const teamCode = team.team_code || ('SYN' + String(team.id).padStart(3, '0'));
+        return `
         <div class="team-card">
             <div class="team-card-header">
-                <div>
-                    <h4>${team.team_name}</h4>
+                <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                    <span class="badge" style="background: rgba(0, 206, 201, 0.15); color: var(--accent-cyan); font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid rgba(0, 206, 201, 0.3);">
+                        <i class="fas fa-id-badge"></i> ${teamCode}
+                    </span>
+                    <h4 style="margin: 0;">${team.team_name}</h4>
                     <span class="status-badge status-${team.status}">${team.status.replace('_', ' ')}</span>
                 </div>
                 <div class="team-actions">
+                    ${team.status !== 'checked_in' ? `
+                        <button class="btn btn-primary btn-sm" onclick="checkInTeam(${team.id})" title="Check in team and automatically shuffle/assign problem statement">
+                            <i class="fas fa-qrcode"></i> Check In & Assign PS
+                        </button>
+                    ` : `
+                        <button class="btn btn-outline btn-sm" onclick="shuffleTeamPS(${team.id})" title="Re-shuffle problem statement for this team">
+                            <i class="fas fa-random"></i> Shuffle PS
+                        </button>
+                    `}
                     ${team.status === 'registered' ? `
                         <button class="btn btn-success btn-sm" onclick="updateTeamStatus(${team.id}, 'approved')"><i class="fas fa-check"></i> Approve</button>
                         <button class="btn btn-danger btn-sm" onclick="updateTeamStatus(${team.id}, 'rejected')"><i class="fas fa-times"></i> Reject</button>
                     ` : ''}
-                    ${team.status === 'approved' ? `
-                        <button class="btn btn-primary btn-sm" onclick="updateTeamStatus(${team.id}, 'checked_in')"><i class="fas fa-door-open"></i> Check In</button>
-                    ` : ''}
-                    <button class="btn btn-outline btn-sm" onclick="deleteTeam(${team.id})" style="color: var(--accent-red);"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-outline btn-sm" onclick="deleteTeam(${team.id})" style="color: var(--accent-red);" title="Delete Team"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
             <div class="team-meta">
                 <span><i class="fas fa-envelope"></i> ${team.team_lead_email}</span>
                 <span><i class="fas fa-users"></i> ${team.team_size} members</span>
-                <span><i class="fas fa-calendar"></i> ${new Date(team.registered_at).toLocaleDateString()}</span>
-                ${team.problem_statement_title ? `<span><i class="fas fa-clipboard"></i> ${team.problem_statement_title}</span>` : ''}
+                <span><i class="fas fa-calendar"></i> Reg: ${new Date(team.registered_at).toLocaleDateString()}</span>
+                ${team.checked_in_at ? `<span style="color: var(--accent-green);"><i class="fas fa-check-double"></i> Checked in: ${formatDateTime(team.checked_in_at)}</span>` : '<span style="color: var(--accent-orange);"><i class="fas fa-hourglass-half"></i> Not checked in</span>'}
+                ${team.problem_statement_title ? `
+                    <span style="color: var(--accent-cyan); font-weight: 600;"><i class="fas fa-clipboard-check"></i> PS: ${team.problem_statement_title}</span>
+                ` : `
+                    <span style="color: var(--text-muted);"><i class="fas fa-question-circle"></i> PS: Awaiting Check-in</span>
+                `}
+                ${team.project_repo ? `<span><a href="${team.project_repo}" target="_blank" style="color: var(--accent-secondary);"><i class="fab fa-github"></i> Repo</a></span>` : ''}
             </div>
             <div class="members-grid">
                 ${(team.members || []).map(m => `
@@ -337,14 +354,45 @@ function renderTeams(teams) {
                 `).join('')}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+async function checkInTeam(id) {
+    try {
+        const res = await apiCall(`${API_BASE}/teams/${id}/checkin`, 'POST');
+        const data = await res.json();
+        showToast(data.message || 'Team checked in successfully!', 'success');
+        if (data.problem_statement) {
+            showToast(`Assigned PS: ${data.problem_statement.title}`, 'info');
+        }
+        loadTeams();
+        loadDashboardStats();
+    } catch (err) {
+        showToast('Failed to check in team', 'error');
+    }
+}
+
+async function shuffleTeamPS(id) {
+    if (!confirm('Shuffle and assign a new Problem Statement to this team?')) return;
+    try {
+        const res = await apiCall(`${API_BASE}/teams/${id}/shuffle-ps`, 'POST');
+        const data = await res.json();
+        showToast(data.message || 'Problem statement assigned!', 'success');
+        loadTeams();
+        loadDashboardStats();
+    } catch (err) {
+        showToast('Failed to shuffle problem statement', 'error');
+    }
 }
 
 async function updateTeamStatus(id, status) {
     try {
-        await apiCall(`${API_BASE}/teams/${id}/status`, 'PATCH', { status });
-        showToast(`Team ${status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'checked in'} successfully!`, 'success');
+        const res = await apiCall(`${API_BASE}/teams/${id}/status`, 'PATCH', { status });
+        const data = await res.json();
+        showToast(`Team status updated!`, 'success');
         loadTeams();
+        loadDashboardStats();
     } catch (err) {
         showToast('Failed to update status', 'error');
     }
@@ -356,6 +404,7 @@ async function deleteTeam(id) {
         await apiCall(`${API_BASE}/teams/${id}`, 'DELETE');
         showToast('Team deleted', 'success');
         loadTeams();
+        loadDashboardStats();
     } catch (err) {
         showToast('Failed to delete team', 'error');
     }
@@ -391,7 +440,7 @@ function renderPSList(items) {
             <p>${item.description}</p>
             <div class="item-meta">
                 <span class="tag">${item.category}</span>
-                <span class="tag" style="background:rgba(${item.difficulty==='easy'?'85,239,196':item.difficulty==='medium'?'253,203,110':'255,107,107'},0.15); color:${item.difficulty==='easy'?'var(--accent-green)':item.difficulty==='medium'?'var(--accent-orange)':'var(--accent-red)'};">${item.difficulty}</span>
+                <span class="tag" style="background:rgba(${item.difficulty === 'easy' ? '85,239,196' : item.difficulty === 'medium' ? '253,203,110' : '255,107,107'},0.15); color:${item.difficulty === 'easy' ? 'var(--accent-green)' : item.difficulty === 'medium' ? 'var(--accent-orange)' : 'var(--accent-red)'};">${item.difficulty}</span>
                 <span>${item.is_active ? '✅ Active' : '❌ Inactive'}</span>
             </div>
         </div>
@@ -410,6 +459,14 @@ function showPSModal(editData = null) {
             <div class="form-group">
                 <label>Description</label>
                 <textarea id="psDescription" rows="4" required style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${editData?.description || ''}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Problem Faced (Challenges)</label>
+                <textarea id="psProblemFaced" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Challenges faced in existing systems...">${editData?.problem_faced || ''}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Suggested Solution & Architecture</label>
+                <textarea id="psSuggestedSolution" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Recommended system architecture, models, or solutions...">${editData?.suggested_solution || ''}</textarea>
             </div>
             <div class="form-group">
                 <label>Category</label>
@@ -458,6 +515,8 @@ async function submitPS(e, id) {
     const data = {
         title: document.getElementById('psTitle').value,
         description: document.getElementById('psDescription').value,
+        problem_faced: document.getElementById('psProblemFaced').value,
+        suggested_solution: document.getElementById('psSuggestedSolution').value,
         category: document.getElementById('psCategory').value,
         difficulty: document.getElementById('psDifficulty').value,
     };
@@ -520,7 +579,7 @@ function renderAnnouncementsList(items) {
             </div>
             <p>${item.message}</p>
             <div class="item-meta">
-                <span class="tag" style="background:rgba(${item.priority==='urgent'?'255,107,107':item.priority==='high'?'253,203,110':item.priority==='low'?'85,239,196':'108,92,231'},0.15);">${item.priority}</span>
+                <span class="tag" style="background:rgba(${item.priority === 'urgent' ? '255,107,107' : item.priority === 'high' ? '253,203,110' : item.priority === 'low' ? '85,239,196' : '108,92,231'},0.15);">${item.priority}</span>
                 <span>${item.is_active ? '✅ Active' : '❌ Inactive'}</span>
                 <span>${new Date(item.created_at).toLocaleString()}</span>
             </div>

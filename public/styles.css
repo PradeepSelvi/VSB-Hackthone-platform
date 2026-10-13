@@ -1518,3 +1518,277 @@ body {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* ================================================
+   Team Portal & Problem Statement Explorer Styles
+   ================================================ */
+
+.nav-login-btn {
+    border: 1px solid var(--accent-secondary);
+    border-radius: 8px;
+    padding: 0.4rem 0.9rem !important;
+    color: var(--accent-secondary) !important;
+    background: rgba(162, 155, 254, 0.08);
+    transition: var(--transition);
+}
+
+.nav-login-btn:hover {
+    background: var(--accent-primary) !important;
+    color: white !important;
+    box-shadow: 0 0 15px rgba(108, 92, 231, 0.4);
+}
+
+/* Modal Overlay */
+.site-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(5, 5, 12, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    overflow-y: auto;
+    animation: fadeIn 0.25s ease;
+}
+
+.site-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(108, 92, 231, 0.15);
+    width: 100%;
+    max-width: 780px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalSlideUp {
+    from { opacity: 0; transform: translateY(30px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.site-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(26, 26, 46, 0.5);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.site-modal-header h3 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.site-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.site-modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.site-modal-body {
+    padding: 1.75rem;
+}
+
+/* Team Credentials Box */
+.credentials-banner {
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(0, 206, 201, 0.15));
+    border: 1px solid rgba(108, 92, 231, 0.4);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: center;
+}
+
+.team-id-display {
+    font-family: var(--font-display);
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--accent-cyan);
+    text-shadow: 0 0 15px rgba(0, 206, 201, 0.4);
+    margin: 0.5rem 0;
+}
+
+.copy-btn-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.credential-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(10, 10, 15, 0.6);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.95rem;
+}
+
+/* Locked / Unlocked Banners */
+.ps-locked-card {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(253, 203, 110, 0.08));
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.ps-locked-icon {
+    font-size: 3rem;
+    color: var(--accent-orange);
+    margin-bottom: 1rem;
+    animation: pulse 2s infinite;
+}
+
+.ps-unlocked-card {
+    background: linear-gradient(135deg, rgba(85, 239, 196, 0.15), rgba(0, 206, 201, 0.1));
+    border: 1px solid rgba(85, 239, 196, 0.4);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.ps-unlocked-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ps-unlocked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(85, 239, 196, 0.2);
+    color: var(--accent-green);
+    padding: 0.4rem 0.9rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* 24-Hour Countdown Clock */
+.countdown-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(10, 10, 15, 0.7);
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 206, 201, 0.3);
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+/* Detailed Problem View */
+.ps-detail-card {
+    background: rgba(20, 20, 35, 0.85);
+    border: 1px solid rgba(108, 92, 231, 0.25);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.ps-detail-section {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ps-detail-section h5 {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    color: var(--accent-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.ps-detail-section p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 0.92rem;
+}
+
+/* Team Members Mini-Table */
+.team-members-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-size: 0.88rem;
+}
+
+.team-members-table th {
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.team-members-table td {
+    padding: 0.6rem 0.8rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.leader-badge {
+    background: rgba(253, 203, 110, 0.2);
+    color: var(--accent-orange);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.4rem;
+}
+
+/* Submission Form */
+.submission-card {
+    background: rgba(20, 20, 35, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+}
+

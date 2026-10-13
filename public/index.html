@@ -29,6 +29,7 @@
                 <a href="#timeline" class="nav-link">Timeline</a>
                 <a href="#problems" class="nav-link">Problems</a>
                 <a href="#announcements" class="nav-link">Updates</a>
+                <button class="nav-link nav-login-btn" onclick="openTeamPortal()"><i class="fas fa-sign-in-alt"></i> Team Login</button>
                 <a href="#register" class="nav-link nav-cta">Register Now</a>
             </div>
             <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
@@ -75,6 +76,9 @@
                 <a href="#register" class="btn btn-primary btn-lg">
                     <i class="fas fa-rocket"></i> Register Your Team
                 </a>
+                <button class="btn btn-outline btn-lg" onclick="openTeamPortal()">
+                    <i class="fas fa-id-card"></i> Team Login (SYN ID)
+                </button>
                 <a href="#problems" class="btn btn-outline btn-lg">
                     <i class="fas fa-clipboard-list"></i> View Problems
                 </a>
@@ -180,7 +184,11 @@
             <div class="section-header">
                 <span class="section-tag"><i class="fas fa-lightbulb"></i> Challenges</span>
                 <h2 class="section-title">Problem <span class="gradient-text">Statements</span></h2>
-                <p class="section-subtitle">Choose your challenge and build something incredible</p>
+                <p class="section-subtitle">25 official challenges by Department of AI & Data Science, V.S.B Engineering College</p>
+                <div style="margin: 1.25rem auto 1.5rem; max-width: 760px; background: rgba(0, 206, 201, 0.08); border: 1px solid rgba(0, 206, 201, 0.25); border-radius: 12px; padding: 0.9rem 1.5rem; font-size: 0.95rem; color: var(--accent-cyan); display: flex; align-items: center; justify-content: center; gap: 0.75rem; text-align: center;">
+                    <i class="fas fa-random" style="font-size: 1.2rem;"></i>
+                    <span><strong>Venue Allocation:</strong> Problem statements will be shuffled and unlocked on your <strong>Team Dashboard</strong> right after check-in at the desk!</span>
+                </div>
             </div>
             <div class="filter-bar" id="filterBar">
                 <button class="filter-btn active" data-filter="all">All</button>
@@ -358,6 +366,32 @@
             </div>
         </div>
     </footer>
+
+    <!-- Team Portal Modal (Login & Dashboard) -->
+    <div class="site-modal-overlay" id="teamPortalModal" style="display:none;">
+        <div class="site-modal">
+            <div class="site-modal-header">
+                <h3 id="teamPortalTitle"><i class="fas fa-id-badge"></i> Team Leader Portal</h3>
+                <button class="site-modal-close" onclick="closeTeamPortal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="site-modal-body" id="teamPortalBody">
+                <!-- Dynamically populated by JS: Login Form or Team Dashboard -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Problem Statement Detail Reader Modal -->
+    <div class="site-modal-overlay" id="psDetailModal" style="display:none;">
+        <div class="site-modal">
+            <div class="site-modal-header">
+                <h3 id="psDetailModalTitle"><i class="fas fa-file-code"></i> Problem Statement</h3>
+                <button class="site-modal-close" onclick="closePSModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="site-modal-body" id="psDetailModalBody">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container"></div>
