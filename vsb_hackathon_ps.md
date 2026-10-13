@@ -1,0 +1,351 @@
+Problem Statements-VSB
+
+# 1\. Lending & Credit
+
+## Problem Statement
+
+Develop an AI-assisted lending and credit assessment platform that checks loan documents, evaluates relevant risk indicators, and supports consistent, timely credit decisions while applying lender policies and compliance requirements.
+
+## Problem Faced
+
+Loan applications may contain documents in different formats, missing information, and inconsistencies that require manual review. Risk assessments can vary between reviewers, and delays in checking eligibility and compliance can slow decisions. Automated scores can also be difficult to explain if the system does not show the evidence behind them.
+
+## Suggested Solution
+
+Build a secure document-ingestion workflow with extraction and validation, then apply configurable credit-risk rules and explainable models. Show missing items, risk factors, and policy checks in a reviewer dashboard. Include access controls, audit logs, fairness testing, and human review for complex or borderline applications.
+
+# 2\. Fraud Detection
+
+## Problem Statement
+
+Develop a real-time fraud detection system that evaluates login and payment events to identify suspicious activity while minimizing unnecessary alerts for legitimate customers.
+
+## Problem Faced
+
+Fraud patterns change quickly, and suspicious activity may involve combinations of device, account, login, and payment signals. Strict rules can generate too many false positives, while overly permissive rules may miss fraud. Decisions must be made quickly without exposing sensitive customer data.
+
+## Suggested Solution
+
+Combine configurable rules with anomaly detection and risk scoring over approved event streams. Use graduated responses such as step-up authentication, transaction review, or temporary holds according to risk. Provide evidence for alerts, monitor false-positive and missed-fraud rates, and keep audit logs and human escalation for disputed cases.
+
+# 3\. Personalised Banking
+
+## Problem Statement
+
+Build a banking-app feature that provides customers with personalized financial guidance based on their spending patterns, savings progress, and stated financial goals.
+
+## Problem Faced
+
+Customers may find it difficult to understand spending patterns or translate financial goals into practical steps. Generic advice may not reflect a customer's circumstances, while inaccurate categorization or intrusive use of transaction data can reduce trust.
+
+## Suggested Solution
+
+With appropriate consent, categorize transaction data and summarize cash flow, recurring expenses, savings progress, and goal milestones. Generate transparent, actionable suggestions with explanations and configurable preferences. Protect financial data, allow customers to correct categories or opt out, and avoid presenting automated guidance as guaranteed investment or financial outcomes.
+
+# 4\. Open Banking & APIs
+
+## Problem Statement
+
+Develop a secure open-banking API platform that enables authorized partners to integrate approved banking capabilities and build value-added services through documented, governed interfaces.
+
+## Problem Faced
+
+Partners can face inconsistent interfaces, authentication procedures, data formats, and onboarding processes. Weak consent controls or poorly scoped access may expose sensitive financial information, while limited monitoring makes integrations harder to maintain.
+
+## Suggested Solution
+
+Provide standardized APIs, developer documentation, sandbox credentials, partner onboarding, and usage analytics. Enforce strong authentication, scoped authorization, explicit consent, encryption, rate limits, audit logs, versioning, and revocation. Use synthetic data in the test environment and support transparent usage or billing controls where applicable.
+
+# 5\. Payments Modernisation
+
+## Problem Statement
+
+Design a payment-modernisation platform that supports faster, lower-cost, interoperable payment flows while integrating compliance checks and transaction monitoring.
+
+## Problem Faced
+
+Legacy payment systems may use incompatible formats and slow settlement processes. Reconciliation exceptions, duplicate requests, inconsistent status updates, and compliance checks can delay transactions or increase operational cost.
+
+## Suggested Solution
+
+Build modular payment APIs with standardized message handling, idempotency, transaction-state tracking, and automated reconciliation. Add appropriate identity, sanctions, fraud, and compliance checks, plus exception queues and audit trails. Test failure recovery and security carefully, and ensure integrations follow the relevant payment-network and regulatory requirements.
+
+# 6\. Underwriting Automation
+
+## Problem Statement
+
+Develop an AI-assisted insurance underwriting platform that reads application inputs and supporting documents, evaluates risk factors, and recommends a premium or routes complex cases to a human underwriter.
+
+## Problem Faced
+
+Underwriting information can be incomplete, inconsistent, and distributed across forms and documents. Manual review slows turnaround, while opaque automated recommendations can be hard to justify or may treat applicants unfairly.
+
+## Suggested Solution
+
+Extract and validate application details, apply insurer-approved rules and explainable models, and display supporting evidence and uncertainty. Route exceptions and high-risk cases to qualified underwriters. Maintain audit trails, test for unfair outcomes, and allow reviewers to correct data and override recommendations.
+
+# 7\. End-to-End Claims Automation
+
+## Problem Statement
+
+Build a claims-processing workflow that validates straightforward insurance claims, estimates eligible payouts under policy terms, and supports payment processing with minimal manual handling.
+
+## Problem Faced
+
+Claims may arrive with incomplete documents, inconsistent incident details, or policy conditions that require interpretation. Manual checks create delays, while full automation without safeguards risks incorrect payouts or missed fraud indicators.
+
+## Suggested Solution
+
+Create a document intake and validation pipeline that checks policy coverage, required evidence, and claim consistency. Use rules and AI to estimate straightforward payouts, flag anomalies, and route uncertain cases to claims specialists. Track every decision, provide reasons for exceptions, and require approval where policy or regulatory rules demand it.
+
+# 8\. Usage-Based Insurance
+
+## Problem Statement
+
+Create an insurance pricing platform that uses consented real-world behaviour data, such as vehicle telematics or approved IoT measurements, to inform premiums alongside insurer-approved risk factors.
+
+## Problem Faced
+
+Traditional pricing may not capture differences in actual usage. Behavioural data can be noisy or incomplete, continuous monitoring raises privacy concerns, and unexplained changes in premiums can undermine customer trust.
+
+## Suggested Solution
+
+Validate device data, derive relevant usage measures, and combine them with transparent, validated pricing rules. Explain how factors affect a quote, minimize data collection, secure records, and provide consent controls. Monitor model fairness and route disputed or unusual cases to human review.
+
+# 9\. Embedded Insurance
+
+## Problem Statement
+
+Build an embedded-insurance service that lets approved partner platforms offer relevant insurance within checkout, booking, or other customer journeys, with transparent pricing and digital policy issuance.
+
+## Problem Faced
+
+Separate insurance applications create friction, while partner and insurer systems may not share compatible interfaces. Eligibility, disclosures, payments, cancellations, and policy records must stay consistent across systems.
+
+## Suggested Solution
+
+Create APIs for product selection, eligibility, quotes, consent, payment confirmation, issuance, and policy retrieval. Use secure authentication, idempotent requests, event notifications, audit trails, and clear coverage disclosures. Provide exception handling and a test environment to prevent duplicate or inconsistent policies.
+
+# 10\. Catastrophe Risk Modelling
+
+## Problem Statement
+
+Develop an explainable catastrophe-risk modelling platform that combines climate, geospatial, and historical loss data to support disaster-risk estimation and insurance pricing.
+
+## Problem Faced
+
+Catastrophe risk depends on interacting hazards, location, exposure, and vulnerability. Data may be incomplete or inconsistent, and a model can understate uncertainty or fail when climate patterns and exposure change.
+
+## Suggested Solution
+
+Integrate validated hazard, exposure, and loss datasets, then model risk at appropriate spatial scales. Present scenarios, assumptions, uncertainty, and the evidence behind estimates in a map-based dashboard. Validate results with domain experts, monitor data quality, and use outputs to support—not automatically determine—underwriting decisions.
+
+# 11\. Prior Authorisation Automation
+
+## Problem Statement
+
+Develop a healthcare workflow that checks submitted clinical documentation against payer rules and helps automate prior-authorisation requests to reduce avoidable delays in treatment approval.
+
+## Problem Faced
+
+Prior-authorisation submissions often require repetitive document checks and matching clinical details to payer-specific criteria. Missing information and changing rules can cause rework, while incorrect automated decisions can delay necessary care.
+
+## Suggested Solution
+
+Parse submitted clinical documents, extract relevant information, and compare it with versioned payer criteria. Show which requirements are met or missing, cite the source evidence, and route uncertain or clinically complex cases to qualified reviewers. Protect patient data, maintain audit logs, and keep final decisions within authorized clinical and payer processes.
+
+# 12\. Clinical Documentation
+
+## Problem Statement
+
+Create a consent-based clinical documentation assistant that converts consultations into draft doctor notes, reducing administrative workload while allowing clinicians to review and approve the record.
+
+## Problem Faced
+
+Clinicians spend substantial time writing notes, while medical conversations include interruptions, accents, specialized terminology, and overlapping speech. Speech recognition can mishear medication names, negations, or dosages, making unreviewed notes unsafe.
+
+## Suggested Solution
+
+Use speech recognition and medical-language processing to draft structured notes and link key statements to transcript evidence where possible. Require clinician review before saving to the official record, encrypt audio and notes, apply retention controls, and evaluate performance across accents and specialties.
+
+# 13\. Healthcare Interoperability
+
+## Problem Statement
+
+Develop a secure, consent-based healthcare interoperability platform that enables authorized sharing of patient records across providers and payers using standards such as HL7 FHIR.
+
+## Problem Faced
+
+Records are distributed across systems with different formats and identifiers, causing incomplete histories, duplicate tests, and delays. Inconsistent terminology can lead to mismatches, and uncontrolled sharing risks exposing sensitive health information.
+
+## Suggested Solution
+
+Build a FHIR-compatible integration layer with validated mappings, patient identity matching, consent management, role-based access, encryption, and audit logs. Show source and freshness of records, flag missing or conflicting information, and test integrations with synthetic data before deployment.
+
+# 14\. Readmission Prevention
+
+## Problem Statement
+
+Build a predictive healthcare system that identifies patients at elevated risk of readmission using authorized electronic health record information and relevant social factors, then supports timely follow-up interventions after discharge.
+
+## Problem Faced
+
+Readmission risks may be associated with multiple clinical and social factors that are spread across records. Discharge teams have limited time, data may be incomplete, and a risk score alone does not identify which intervention a patient needs.
+
+## Suggested Solution
+
+Develop a validated risk model and display interpretable contributing factors with uncertainty. Connect high-risk flags to a follow-up workflow for care-team review, medication reconciliation, appointment planning, or support referrals. Protect patient data, evaluate performance across groups, and use predictions to guide care rather than deny services.
+
+# 15\. Value-Based Care Analytics
+
+## Problem Statement
+
+Create a dashboard that tracks healthcare quality metrics, identifies care gaps, and helps care teams evaluate outcomes across patient populations.
+
+## Problem Faced
+
+Metrics are spread across clinical and operational systems and may be calculated inconsistently. Aggregate averages can hide differences between groups, and incomplete documentation can be mistaken for a genuine care gap.
+
+## Suggested Solution
+
+Standardize approved data and metric definitions, show trends and cohort-level outcomes, and provide evidence and data-quality indicators for identified gaps. Apply privacy controls, validate measures with clinical stakeholders, and use the dashboard to support improvement workflows and professional judgment.
+
+# 16\. Decentralized AI Agent Orchestrator for Disaster Response
+
+## Problem Statement
+
+Build a peer-to-peer (P2P), decentralized mesh-network protocol that enables local AI agents running on consumer hardware, such as smartphones and drones, to coordinate disaster-response tasks without relying on internet access or centralized cloud servers. The system should support local task coordination, relief-supply allocation, and spatial-map sharing when communication infrastructure is unavailable.
+
+## Problem Faced
+
+Natural disasters can damage mobile networks, power systems, and internet connectivity, leaving rescue teams isolated and unable to access centralized coordination platforms. Teams may have incomplete information about affected locations, available supplies, and ongoing rescue tasks. Devices can disconnect or move between network ranges, and different agents may hold conflicting or outdated information. Any coordination system must also manage limited battery power, unreliable links, data integrity, and the risk of acting on incorrect or stale reports.
+
+## Suggested Solution
+
+Develop a simulated P2P synchronization engine using local-network communication and store-and-forward messaging so devices can exchange updates whenever peers become reachable. Create specialized local agents for incident reporting, task assignment, relief inventory, and spatial-map updates, with timestamps and source information attached to shared records. Use conflict-resolution rules, message prioritization, retry handling, and local caching to tolerate intermittent connectivity. Provide an offline incident-command dashboard showing reported incidents, assigned tasks, supply status, and map updates. Test the prototype under simulated network partitions and device failures, protect sensitive location data, and require human confirmation for high-impact rescue or resource-allocation decisions.
+
+# 17\. Real-Time Indian Sign Language Translator
+
+## Problem Statement
+
+Create a computer-vision application that captures Indian Sign Language gestures from a live video stream and translates recognized signs into readable text and, where appropriate, spoken output. The aim is to support communication between sign-language users and people who do not understand ISL, while accounting for gesture sequence, context, and regional variation.
+
+## Problem Faced
+
+Sign language conveys meaning through hand shapes, movement, body posture, facial expression, and context, not just isolated hand positions. Lighting, camera angle, occlusion, signing speed, and differences between signers can reduce recognition accuracy. A system trained on a limited set of signs may fail on continuous signing or produce grammatically unnatural translations. Misinterpretations can have serious consequences in medical, legal, or emergency conversations.
+
+## Suggested Solution
+
+Develop a video-processing pipeline that detects hands, body pose, and relevant facial cues, then models gesture sequences using a suitable temporal vision or sequence-learning approach. Build and evaluate a consented, representative ISL dataset with expert input and clear coverage limits. Display recognized text with confidence indicators and let users correct uncertain outputs; provide optional text-to-speech for confirmed translations. Test with Deaf and hard-of-hearing participants, support privacy-preserving video handling, and clearly indicate when the system is uncertain or should not replace a qualified interpreter.
+
+# 18\. Enterprise Legal Intelligence, Contract Risk & Compliance Copilot
+
+## Problem Statement
+
+Develop an AI-powered legal intelligence platform that analyzes contracts, identifies risky clauses, checks compliance requirements, and provides evidence-backed explanations.
+
+## Problem Faced
+
+Contracts contain lengthy and complex legal language. Risky clauses, missing obligations, and unusual terms can be overlooked. Comparing a contract with internal policies and regulatory requirements takes time. Legal teams must justify findings with precise evidence. Generic AI responses may misinterpret clauses or invent legal references.
+
+## Suggested Solution
+
+Build a contract upload and document-processing platform. Extract clauses using document parsing, OCR, and legal-language processing. Identify risks such as unusual liability, termination, indemnity, and confidentiality terms. Use RAG to retrieve relevant approved policies and legal references. Display risk scores, highlighted clauses, source citations, and recommended review actions. Keep final legal decisions with qualified human reviewers.
+
+# 19\. Enterprise Multi-Source RAG Intelligence & Evidence Verification
+
+## Problem Statement
+
+Create an advanced RAG platform that answers complex questions using multiple enterprise data sources while verifying evidence, resolving conflicts, and preventing unsupported answers.
+
+## Problem Faced
+
+Relevant information is spread across PDFs, spreadsheets, internal websites, databases, and reports. Different documents may contain contradictory or outdated information. Basic RAG systems can retrieve irrelevant passages or miss important evidence. AI-generated answers may include unsupported claims. Sensitive documents must not be exposed to unauthorized users.
+
+## Suggested Solution
+
+Build connectors for multiple document and data formats. Extract, chunk, index, and tag content with source, date, version, and access permissions. Use hybrid retrieval combining keyword search and vector similarity. Rerank retrieved passages and retrieve additional evidence when needed. Generate answers with claim-level citations and verify that each important claim is supported. Detect conflicting evidence, show source dates, and abstain when evidence is insufficient. Evaluate retrieval quality, citation correctness, factual accuracy, and access-control enforcement.
+
+# 20\. AI Grievance Redressal Prioritization System
+
+## Problem Statement
+
+Design a multilingual natural-language-processing system for government or corporate grievance portals that reads complaints submitted in free text, identifies the subject and urgency, categorizes the issue, and routes it to the appropriate department. The system should help organizations respond more quickly while keeping complainants informed about the status of their cases.
+
+## Problem Faced
+
+Complaints may arrive in different languages, spelling styles, formats, and levels of detail. Important urgency signals can be buried in long descriptions, and misclassification can send a complaint to the wrong team or delay a serious case. Duplicate submissions and incomplete contact information can complicate processing. Automated prioritization can also disadvantage people who write less formally or use a language that the model handles poorly.
+
+## Suggested Solution
+
+Develop a complaint intake pipeline that detects language, normalizes text without losing the original message, identifies key entities, and classifies the topic and urgency. Use configurable routing rules alongside NLP predictions, and show staff the factors supporting each recommendation. Flag uncertain or potentially urgent cases for human review, allow manual reassignment and correction, and send acknowledgement and status updates through accessible channels. Measure performance across languages and complaint types, protect personal data, and avoid automatically rejecting or closing complaints solely on a model prediction.
+
+# 21\. Early-Warning Community Outbreak Engine
+
+## Problem Statement
+
+Develop a spatial analytics platform that detects unusual changes in community health indicators by analyzing appropriately anonymized and authorized regional pharmacy trends, clinical records, and other permitted public-health signals. The system should identify possible local illness clusters early enough for public-health teams to investigate and respond before a situation escalates.
+
+## Problem Faced
+
+Early outbreak signals can be scattered across pharmacies, clinics, and public-health reporting systems, with delays and inconsistent formats. Increases in medicine purchases may reflect seasonal illness, promotions, or other causes rather than an outbreak. Sparse data can hide emerging patterns, while inaccurate alerts may create unnecessary concern. Fine-grained location or health information can also risk re-identifying individuals if not properly protected.
+
+## Suggested Solution
+
+Build a pipeline that standardizes authorized data feeds, aggregates them to appropriate geographic and time intervals, and monitors deviations from seasonal baselines. Combine statistical anomaly detection with corroborating indicators, and show the size, timing, uncertainty, and sources of each alert. Include epidemiologist review and a workflow for recording investigations and outcomes. Apply data minimization, de-identification, access controls, minimum aggregation thresholds, and retention limits. Treat alerts as signals for public-health assessment, not as confirmed diagnoses or proof of an outbreak.
+
+# 22\. Decentralized Supply Chain Provenance for Pharmaceuticals
+
+## Problem Statement
+
+Develop a blockchain-backed ledger system that tracks every custody transfer of pharmaceutical inventory from the manufacturing plant to the final dispenser. Each medicine batch should be associated with a unique cryptographic QR identifier so that authorized participants can verify its origin, movement, and custody history across the distribution network.
+
+## Problem Faced
+
+Counterfeit medications can enter distribution networks when packaging hand-offs and inventory records are maintained in isolated or vulnerable databases. Manufacturers, distributors, and pharmacies may use different systems, making it difficult to establish a consistent chain of custody. Manual verification can be slow, records may be altered or incomplete, and a QR code by itself cannot prove that the physical medicine is genuine unless the underlying issuance and verification process is trustworthy.
+
+## Suggested Solution
+
+Develop a prototype using smart contracts to record batch creation, custody transfers, receipt confirmation, and relevant status changes. Generate unique QR identifiers linked to verified batch records, and provide role-based interfaces for manufacturers, distributors, and pharmacies to scan and verify each hand-off. Store sensitive or large documents securely off-chain and record appropriate hashes or references on the ledger. Include access control, audit history, duplicate or invalid scan alerts, and procedures for reporting recalls or suspicious products. The system should complement, rather than replace, regulatory checks and physical product authentication.
+
+# 23\. Agent Hijack Shield
+
+## Problem Statement
+
+Develop a security layer that protects AI agents from prompt injection, malicious tool instructions, and unauthorized attempts to change their intended behavior.
+
+## Problem Faced
+
+Documents and websites can contain hidden or misleading instructions. An AI agent may treat untrusted content as an instruction rather than data. Malicious prompts may attempt to extract sensitive information. Agents with excessive permissions can perform unauthorized actions. It is difficult to distinguish legitimate instructions from hostile content.
+
+## Suggested Solution
+
+Build a gateway that inspects prompts, retrieved documents, and tool requests. Separate trusted system instructions from untrusted user or document content. Detect suspicious patterns and flag potential prompt-injection attempts. Enforce tool permissions, data-access restrictions, and action allowlists. Require human confirmation for sensitive operations. Test against safe, simulated adversarial prompts and measure detection and false alarms.
+
+# 24\. AI-Powered Digital Evidence Integrity & Fraud Investigation Platform
+
+## Problem Statement
+
+Develop an AI-powered platform that helps investigators verify and connect digital evidence collected from screenshots, PDFs, emails, receipts, chat exports, and other digital records. The system should identify suspicious inconsistencies, preserve source traceability, connect related entities and events, and produce an explainable investigation timeline without treating AI-generated findings as definitive proof.
+
+## Problem Faced
+
+Investigations often involve evidence scattered across multiple formats and sources. Manually comparing timestamps, names, transactions, and message histories is slow and error-prone. Edited media, duplicate records, missing context, and conflicting statements can make it difficult to establish a reliable sequence of events. Investigators also need to explain how each conclusion was reached and maintain a clear audit trail.
+
+## Suggested Solution
+
+Build a secure evidence-ingestion workspace that extracts text and metadata from supported files, detects duplicates and possible tampering indicators, and links people, organizations, dates, locations, and transactions across records. Generate a chronological timeline and relationship graph, flag contradictions with citations to the original evidence, and assign transparent confidence indicators. Preserve original files, record processing steps, and export an auditable report for human review. The platform must distinguish verified facts from AI inferences and avoid declaring guilt or authenticity without independent validation.
+
+# 25\. Usage-Based Insurance
+
+## Problem Statement
+
+Develop an insurance pricing platform that calculates premiums using consented real-world behaviour data, such as vehicle telematics, approved wearable signals, or IoT measurements, rather than relying only on broad demographic categories. The system should help insurers offer pricing that better reflects measured usage or risk while providing customers with understandable explanations.
+
+## Problem Faced
+
+Traditional insurance pricing may not capture meaningful differences in how a policyholder uses a vehicle, device, or insured asset. Behavioural data can be incomplete, noisy, or affected by device failures, and excessive monitoring can raise privacy concerns. Customers may not understand how their data changes premiums, while biased or poorly validated models can lead to unfair pricing or sudden premium changes.
+
+## Suggested Solution
+
+Create a consent-based data pipeline that validates telematics or device signals and extracts relevant measures, such as mileage, driving smoothness, or usage frequency, according to the insurance product. Combine these measures with transparent actuarial rules and validated models, and show policyholders which factors influence a quote. Apply data minimization, secure storage, retention limits, and opt-in/opt-out controls. Test model performance and fairness, and route unusual or disputed cases to human review.
