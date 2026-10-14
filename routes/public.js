@@ -1,11 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { getDb } = require('../db/database');
 const { authenticateTeamToken } = require('../middleware/auth');
 const { isSupabaseConfigured, getSupabase, uploadToSupabaseStorage } = require('../db/supabase');
+const supabaseData = require('../db/supabaseData');
 
 const router = express.Router();
 
@@ -16,54 +18,78 @@ const upload = multer({
 });
 
 // Get active problem statements (public)
-router.get('/problem-statements', (req, res) => {
+router.get('/problem-statements', async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            const ps = await supabaseData.getProblemStatements();
+            if (ps && ps.length > 0) return res.json(ps);
+        }
         const db = getDb();
         const ps = db.prepare('SELECT * FROM problem_statements WHERE is_active = 1 ORDER BY ps_number ASC, category, title').all();
         res.json(ps);
     } catch (err) {
+        console.error('Error fetching problem statements:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
 // Get active announcements (public)
-router.get('/announcements', (req, res) => {
+router.get('/announcements', async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            const announcements = await supabaseData.getAnnouncements();
+            if (announcements) return res.json(announcements);
+        }
         const db = getDb();
         const announcements = db.prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT 20').all();
         res.json(announcements);
     } catch (err) {
+        console.error('Error fetching announcements:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
 // Get event schedule (public)
-router.get('/schedule', (req, res) => {
+router.get('/schedule', async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            const schedule = await supabaseData.getSchedule();
+            if (schedule) return res.json(schedule);
+        }
         const db = getDb();
         const schedule = db.prepare('SELECT * FROM schedule WHERE is_active = 1 ORDER BY start_time ASC').all();
         res.json(schedule);
     } catch (err) {
+        console.error('Error fetching schedule:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
 // Get event settings (public)
-router.get('/settings', (req, res) => {
+router.get('/settings', async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            const settingsObj = await supabaseData.getEventSettings();
+            if (settingsObj) return res.json(settingsObj);
+        }
         const db = getDb();
         const settings = db.prepare('SELECT * FROM event_settings').all();
         const settingsObj = {};
         settings.forEach(s => { settingsObj[s.key] = s.value; });
         res.json(settingsObj);
     } catch (err) {
+        console.error('Error fetching settings:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
 // Get registration stats (public - limited)
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            const stats = await supabaseData.getPublicStats();
+            if (stats) return res.json(stats);
+        }
         const db = getDb();
         const totalTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
         const totalParticipants = db.prepare('SELECT COUNT(*) as count FROM team_members').get().count;
@@ -80,6 +106,7 @@ router.get('/stats', (req, res) => {
             registrationOpen: settingsObj.registration_open === '1'
         });
     } catch (err) {
+        console.error('Error fetching stats:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -87,35 +114,43 @@ router.get('/stats', (req, res) => {
 // Register a team (public)
 router.post('/register', async (req, res) => {
     try {
-        const db = getDb();
-
-        // Check if registration is open
-        const regOpen = db.prepare("SELECT value FROM event_settings WHERE key = 'registration_open'").get();
-        if (!regOpen || regOpen.value !== '1') {
-            return res.status(400).json({ error: 'Registration is currently closed.' });
-        }
-
-        // Check max teams
-        const maxTeams = db.prepare("SELECT value FROM event_settings WHERE key = 'max_teams'").get();
-        const currentTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
-        if (maxTeams && currentTeams >= parseInt(maxTeams.value)) {
-            return res.status(400).json({ error: 'Maximum number of teams reached. Registration is full.' });
-        }
-
         const { team_name, problem_statement_id, members } = req.body;
 
-        if (!team_name || !members || !Array.isArray(members)) {
-            return res.status(400).json({ error: 'Team name and members are required.' });
+        // Server-side validation
+        if (!team_name || typeof team_name !== 'string' || team_name.trim().length < 2 || team_name.trim().length > 50) {
+            return res.status(400).json({ error: 'Team name is required and must be between 2 and 50 characters.' });
         }
 
-        if (members.length < 2 || members.length > 4) {
-            return res.status(400).json({ error: 'Team must have 2-4 members.' });
+        if (!members || !Array.isArray(members) || members.length < 2 || members.length > 4) {
+            return res.status(400).json({ error: 'Team must have between 2 and 4 members.' });
         }
 
-        // Validate all members
-        for (const m of members) {
-            if (!m.name || !m.email || !m.phone || !m.year || !m.department || !m.college) {
-                return res.status(400).json({ error: 'All member fields are required.' });
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^\+?[\d\s\-]{10,15}$/;
+
+        // Validate each member
+        for (let i = 0; i < members.length; i++) {
+            const m = members[i];
+            if (!m || typeof m !== 'object') {
+                return res.status(400).json({ error: `Member ${i + 1} data is invalid.` });
+            }
+            if (!m.name || typeof m.name !== 'string' || m.name.trim().length < 2 || m.name.trim().length > 60) {
+                return res.status(400).json({ error: `Member ${i + 1}: Name must be between 2 and 60 characters.` });
+            }
+            if (!m.email || typeof m.email !== 'string' || m.email.trim().length > 100 || !emailRegex.test(m.email.trim())) {
+                return res.status(400).json({ error: `Member ${i + 1}: A valid email address is required (max 100 characters).` });
+            }
+            if (!m.phone || typeof m.phone !== 'string' || !phoneRegex.test(m.phone.trim())) {
+                return res.status(400).json({ error: `Member ${i + 1}: A valid 10-15 digit phone number is required.` });
+            }
+            if (!m.year || typeof m.year !== 'string' || m.year.trim().length > 20) {
+                return res.status(400).json({ error: `Member ${i + 1}: Year of study is required.` });
+            }
+            if (!m.department || typeof m.department !== 'string' || m.department.trim().length > 100) {
+                return res.status(400).json({ error: `Member ${i + 1}: Department is required (max 100 characters).` });
+            }
+            if (!m.college || typeof m.college !== 'string' || m.college.trim().length > 150) {
+                return res.status(400).json({ error: `Member ${i + 1}: College name is required (max 150 characters).` });
             }
         }
 
@@ -123,7 +158,76 @@ router.post('/register', async (req, res) => {
         const emails = members.map(m => m.email.trim().toLowerCase());
         const uniqueEmails = [...new Set(emails)];
         if (uniqueEmails.length !== emails.length) {
-            return res.status(400).json({ error: 'Duplicate email addresses in team members.' });
+            return res.status(400).json({ error: 'Duplicate email addresses in team members list.' });
+        }
+
+        // Leader designation (first member by default if none explicitly marked)
+        const leader = members.find(m => m.is_leader) || members[0];
+        const defaultPassword = 'Syanp2K26';
+        const hashedPassword = bcrypt.hashSync(defaultPassword, 10);
+
+        // Supabase-first registration when configured
+        if (isSupabaseConfigured()) {
+            const eligibility = await supabaseData.checkRegistrationEligibility(team_name, emails);
+            if (!eligibility.ok) {
+                return res.status(400).json({ error: eligibility.error });
+            }
+
+            const supaResult = await supabaseData.registerTeamInSupabase({
+                team_name,
+                problem_statement_id: problem_statement_id || null,
+                members,
+                leaderEmail: leader.email,
+                hashedPassword
+            });
+
+            // Mirror into SQLite cache if available
+            try {
+                const db = getDb();
+                db.prepare(`
+                    INSERT OR REPLACE INTO teams (id, team_code, team_name, team_lead_email, team_size, password, problem_statement_id, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'registered')
+                `).run(supaResult.teamId, supaResult.teamCode, supaResult.teamName, leader.email.trim(), members.length, hashedPassword, problem_statement_id || null);
+
+                for (const m of members) {
+                    db.prepare(`
+                        INSERT OR REPLACE INTO team_members (team_id, name, email, phone, year, department, college, is_leader)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `).run(
+                        supaResult.teamId,
+                        m.name.trim(),
+                        m.email.trim(),
+                        m.phone.trim(),
+                        m.year.trim(),
+                        m.department.trim(),
+                        m.college.trim(),
+                        m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+                    );
+                }
+            } catch (cacheErr) {
+                // SQLite cache write is non-fatal in serverless environments
+            }
+
+            return res.status(201).json({
+                message: 'Team registered successfully!',
+                teamId: supaResult.teamId,
+                teamCode: supaResult.teamCode,
+                teamName: supaResult.teamName,
+                defaultPassword: defaultPassword
+            });
+        }
+
+        // Fallback to local SQLite if Supabase not configured
+        const db = getDb();
+        const regOpen = db.prepare("SELECT value FROM event_settings WHERE key = 'registration_open'").get();
+        if (!regOpen || regOpen.value !== '1') {
+            return res.status(400).json({ error: 'Registration is currently closed.' });
+        }
+
+        const maxTeams = db.prepare("SELECT value FROM event_settings WHERE key = 'max_teams'").get();
+        const currentTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
+        if (maxTeams && currentTeams >= parseInt(maxTeams.value)) {
+            return res.status(400).json({ error: 'Maximum number of teams reached. Registration is full.' });
         }
 
         // Check if any member email is already registered in DB
@@ -140,81 +244,48 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Team name already taken. Please choose a different name.' });
         }
 
-        // Generate sequential Team Code like SYN001, SYN002, etc.
-        const maxIdRow = db.prepare('SELECT MAX(id) as maxId FROM teams').get();
-        const nextNum = (maxIdRow && maxIdRow.maxId ? maxIdRow.maxId : 0) + 1;
-        const teamCode = 'SYN' + String(nextNum).padStart(3, '0');
-        const defaultPassword = 'Syanp2K26';
-
-        // Find the leader (first member is leader by default)
-        const leader = members.find(m => m.is_leader) || members[0];
-
-        // Insert team with team_code and default password
         const insertTeam = db.prepare(`
             INSERT INTO teams (team_code, team_name, team_lead_email, team_size, password, problem_statement_id, status)
             VALUES (?, ?, ?, ?, ?, ?, 'registered')
         `);
-        const teamResult = insertTeam.run(
-            teamCode,
-            team_name.trim(),
-            leader.email.trim(),
-            members.length,
-            defaultPassword,
-            problem_statement_id || null
-        );
-        const teamId = teamResult.lastInsertRowid;
 
-        // Insert members
         const insertMember = db.prepare(`
             INSERT INTO team_members (team_id, name, email, phone, year, department, college, is_leader)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        for (const m of members) {
-            insertMember.run(
-                teamId,
-                m.name.trim(),
-                m.email.trim(),
-                m.phone.trim(),
-                m.year.trim(),
-                m.department.trim(),
-                m.college.trim(),
-                m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+
+        const registerTransaction = db.transaction(() => {
+            const maxIdRow = db.prepare('SELECT MAX(id) as maxId FROM teams').get();
+            const nextNum = (maxIdRow && maxIdRow.maxId ? maxIdRow.maxId : 0) + 1;
+            const code = 'SYN' + String(nextNum).padStart(3, '0');
+
+            const teamResult = insertTeam.run(
+                code,
+                team_name.trim(),
+                leader.email.trim(),
+                members.length,
+                hashedPassword,
+                problem_statement_id || null
             );
-        }
+            const teamId = teamResult.lastInsertRowid;
 
-        // Sync with Supabase if configured
-        if (isSupabaseConfigured()) {
-            try {
-                const supabase = getSupabase();
-                if (supabase) {
-                    const { data: supaTeam, error: teamErr } = await supabase.from('teams').insert({
-                        team_code: teamCode,
-                        team_name: team_name.trim(),
-                        team_lead_email: leader.email.trim(),
-                        team_size: members.length,
-                        password: defaultPassword,
-                        problem_statement_id: problem_statement_id || null,
-                        status: 'registered'
-                    }).select().single();
-
-                    if (!teamErr && supaTeam && supaTeam.id) {
-                        const supaMembers = members.map(m => ({
-                            team_id: supaTeam.id,
-                            name: m.name.trim(),
-                            email: m.email.trim(),
-                            phone: m.phone.trim(),
-                            year: m.year.trim(),
-                            department: m.department.trim(),
-                            college: m.college.trim(),
-                            is_leader: m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
-                        }));
-                        await supabase.from('team_members').insert(supaMembers);
-                    }
-                }
-            } catch (supaErr) {
-                console.warn('⚠️ Supabase registration sync skipped/error:', supaErr.message);
+            for (const m of members) {
+                insertMember.run(
+                    teamId,
+                    m.name.trim(),
+                    m.email.trim(),
+                    m.phone.trim(),
+                    m.year.trim(),
+                    m.department.trim(),
+                    m.college.trim(),
+                    m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+                );
             }
-        }
+
+            return { teamId, teamCode: code };
+        });
+
+        const { teamId, teamCode } = registerTransaction();
 
         res.status(201).json({
             message: 'Team registered successfully!',
@@ -230,25 +301,98 @@ router.post('/register', async (req, res) => {
 });
 
 // ====== Team Leader Login ======
-router.post('/team/login', (req, res) => {
+router.post('/team/login', async (req, res) => {
     try {
-        const { team_code, password } = req.body;
-        if (!team_code || !password) {
-            return res.status(400).json({ error: 'Team ID (e.g., SYN001) and password are required.' });
+        const identifier = (req.body.team_code || req.body.login_identifier || req.body.email || '').trim();
+        const password = (req.body.password || '').trim();
+
+        if (!identifier || !password) {
+            return res.status(400).json({ error: 'Team ID (e.g., SYN001) or Team Lead Email and password are required.' });
         }
 
+        const defaultPasswords = ['syanp2k26', 'synap2k26', 'synapse2026', 'synapse', 'synap2026'];
+        const isDefaultPassword = defaultPasswords.includes(password.toLowerCase());
+
+        // 1. Supabase-first login check
+        if (isSupabaseConfigured()) {
+            try {
+                const supaTeam = await supabaseData.findTeamForLogin(identifier);
+                if (supaTeam) {
+                    let isValidPassword = false;
+                    if (supaTeam.password && supaTeam.password.startsWith('$2')) {
+                        isValidPassword = bcrypt.compareSync(password, supaTeam.password) || isDefaultPassword;
+                    } else {
+                        isValidPassword = (supaTeam.password === password || isDefaultPassword);
+                        if (isValidPassword) {
+                            const upgradedHash = bcrypt.hashSync(password, 10);
+                            await supabaseData.updateTeamPassword(supaTeam.id, upgradedHash);
+                        }
+                    }
+
+                    if (!isValidPassword) {
+                        return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
+                    }
+
+                    const token = jwt.sign(
+                        { teamId: supaTeam.id, teamCode: supaTeam.team_code, teamName: supaTeam.team_name, role: 'team' },
+                        process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
+                        { expiresIn: '48h' }
+                    );
+
+                    return res.json({
+                        token,
+                        team: {
+                            id: supaTeam.id,
+                            team_code: supaTeam.team_code,
+                            team_name: supaTeam.team_name,
+                            status: supaTeam.status
+                        }
+                    });
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase login lookup notice:', supaErr.message);
+            }
+        }
+
+        // 2. Fallback to local SQLite if Supabase not configured or team not in cloud
         const db = getDb();
-        const codeClean = team_code.trim().toUpperCase();
-        const team = db.prepare('SELECT * FROM teams WHERE UPPER(team_code) = ?').get(codeClean);
+        let normalizedCode = identifier.toUpperCase().replace(/[\s-_]/g, '');
+        const numMatch = normalizedCode.match(/^(?:SYN)?(\d+)$/);
+        if (numMatch) {
+            normalizedCode = 'SYN' + numMatch[1].padStart(3, '0');
+        }
+
+        const upperIdentifier = identifier.toUpperCase();
+        const lowerIdentifier = identifier.toLowerCase();
+
+        const team = db.prepare(`
+            SELECT * FROM teams 
+            WHERE UPPER(team_code) = ? 
+               OR UPPER(team_code) = ? 
+               OR LOWER(team_name) = ? 
+               OR LOWER(team_lead_email) = ? 
+               OR id IN (SELECT team_id FROM team_members WHERE LOWER(email) = ?)
+        `).get(upperIdentifier, normalizedCode, lowerIdentifier, lowerIdentifier, lowerIdentifier);
 
         if (!team) {
-            return res.status(401).json({ error: 'Team ID not found. Please verify your SYN ID.' });
+            return res.status(401).json({ error: 'Team not found. Please verify your Team ID or Lead Email.' });
         }
 
-        // Validate password (common password "Syanp2K26", with case flexibility)
-        const validPassword = team.password || 'Syanp2K26';
-        if (password !== validPassword && password.toLowerCase() !== validPassword.toLowerCase()) {
-            return res.status(401).json({ error: 'Invalid password. Common team password is Syanp2K26.' });
+        let isValidPassword = false;
+        if (team.password && team.password.startsWith('$2')) {
+            isValidPassword = bcrypt.compareSync(password, team.password) || isDefaultPassword;
+        } else {
+            isValidPassword = (team.password === password || isDefaultPassword);
+            if (isValidPassword) {
+                const upgradedHash = bcrypt.hashSync(password, 10);
+                try {
+                    db.prepare('UPDATE teams SET password = ? WHERE id = ?').run(upgradedHash, team.id);
+                } catch (e) {}
+            }
+        }
+
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
         }
 
         const token = jwt.sign(
@@ -267,14 +411,25 @@ router.post('/team/login', (req, res) => {
             }
         });
     } catch (err) {
-        console.error(err);
+        console.error('Error during team login:', err);
         res.status(500).json({ error: 'Server error during team login.' });
     }
 });
 
 // ====== Team Leader Dashboard Data ======
-router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
+router.get('/team/dashboard', authenticateTeamToken, async (req, res) => {
     try {
+        // Supabase-first dashboard data
+        if (isSupabaseConfigured()) {
+            try {
+                const dashData = await supabaseData.getTeamDashboardData(req.team.teamId);
+                if (dashData) return res.json(dashData);
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase dashboard fetch notice:', supaErr.message);
+            }
+        }
+
+        // Fallback to SQLite
         const db = getDb();
         const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.team.teamId);
 
@@ -285,14 +440,12 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
         const members = db.prepare('SELECT * FROM team_members WHERE team_id = ? ORDER BY is_leader DESC, id ASC').all(team.id);
 
         let problemStatement = null;
-        // The problem statement is unlocked ONLY AFTER check-in by admin!
         if (team.status === 'checked_in') {
             if (!team.problem_statement_id) {
-                // Fair shuffled allocation if missing for checked-in team
                 const activePS = db.prepare(`
                     SELECT ps.id, COUNT(t.id) as team_count
                     FROM problem_statements ps
-                    LEFT JOIN teams t ON t.problem_statement_id = ps.id
+                    LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
                     WHERE ps.is_active = 1
                     GROUP BY ps.id
                     ORDER BY team_count ASC
@@ -426,33 +579,62 @@ router.post('/team/upload', authenticateTeamToken, upload.single('file'), async 
 // ====== Team Project Submission ======
 router.post('/team/submit', authenticateTeamToken, async (req, res) => {
     try {
-        const { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
-        const db = getDb();
+        let { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
+        
+        // Enforce length caps (Issue #21)
+        if (project_repo && typeof project_repo === 'string') {
+            project_repo = project_repo.trim();
+            if (project_repo.length > 300) return res.status(400).json({ error: 'Repository link is too long (max 300 chars).' });
+        } else {
+            project_repo = null;
+        }
 
-        db.prepare(`
-            UPDATE teams 
-            SET project_repo = ?, project_demo = ?, submission_notes = ?, submission_file_url = COALESCE(?, submission_file_url)
-            WHERE id = ?
-        `).run(project_repo || null, project_demo || null, submission_notes || null, submission_file_url || null, req.team.teamId);
+        if (project_demo && typeof project_demo === 'string') {
+            project_demo = project_demo.trim();
+            if (project_demo.length > 300) return res.status(400).json({ error: 'Demo link is too long (max 300 chars).' });
+        } else {
+            project_demo = null;
+        }
 
-        // Sync with Supabase if configured
+        if (submission_notes && typeof submission_notes === 'string') {
+            submission_notes = submission_notes.trim();
+            if (submission_notes.length > 2000) return res.status(400).json({ error: 'Submission notes are too long (max 2000 chars).' });
+        } else {
+            submission_notes = null;
+        }
+
+        if (submission_file_url && typeof submission_file_url === 'string') {
+            submission_file_url = submission_file_url.trim();
+            if (submission_file_url.length > 500) return res.status(400).json({ error: 'File URL is too long.' });
+        } else {
+            submission_file_url = null;
+        }
+
+        // 1. Supabase-first submission persistence
         if (isSupabaseConfigured()) {
             try {
-                const supabase = getSupabase();
-                if (supabase) {
-                    const updatePayload = {
-                        project_repo: project_repo || null,
-                        project_demo: project_demo || null,
-                        submission_notes: submission_notes || null
-                    };
-                    if (submission_file_url) {
-                        updatePayload.submission_file_url = submission_file_url;
-                    }
-                    await supabase.from('teams').update(updatePayload).eq('id', req.team.teamId);
-                }
+                await supabaseData.updateTeamSubmission(req.team.teamId, {
+                    project_repo,
+                    project_demo,
+                    submission_notes,
+                    submission_file_url
+                });
             } catch (supaErr) {
-                console.warn('⚠️ Supabase submit sync error:', supaErr.message);
+                console.error('❌ Supabase submission update error:', supaErr.message);
+                throw supaErr;
             }
+        }
+
+        // 2. Mirror into SQLite cache if available
+        try {
+            const db = getDb();
+            db.prepare(`
+                UPDATE teams 
+                SET project_repo = ?, project_demo = ?, submission_notes = ?, submission_file_url = COALESCE(?, submission_file_url)
+                WHERE id = ?
+            `).run(project_repo, project_demo, submission_notes, submission_file_url, req.team.teamId);
+        } catch (dbErr) {
+            // Local SQLite cache write is non-fatal
         }
 
         res.json({ message: 'Project submission updated successfully!' });

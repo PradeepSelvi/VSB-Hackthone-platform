@@ -4,6 +4,26 @@
 
 const API_BASE = '/api';
 
+// ====== Security Sanitization (XSS Prevention) ======
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function safeUrl(url) {
+    if (!url || typeof url !== 'string') return '#';
+    const trimmed = url.trim();
+    if (/^(https?:\/\/|\/)/i.test(trimmed)) {
+        return escapeHtml(trimmed);
+    }
+    return '#';
+}
+
 // ====== State ======
 let problemStatements = [];
 let currentStep = 1;
@@ -145,6 +165,16 @@ function revealPageCards(container) {
     });
 }
 
+// ====== Admin Shortcut (Ctrl + Shift + A) ======
+function initAdminShortcut() {
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a' || e.code === 'KeyA')) {
+            e.preventDefault();
+            window.location.href = '/admin.html';
+        }
+    });
+}
+
 // ====== Initialize ======
 document.addEventListener('DOMContentLoaded', () => {
     initParticles();
@@ -155,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPublicData();
     initRegistrationForm();
     initScrollAnimations();
+    initAdminShortcut();
 });
 
 // ====== Falling-apart Hero Title (hover each letter -> plunge to bottom) ======
@@ -304,40 +335,48 @@ function initCodeTyping() {
 // ====== Load Public Data ======
 async function loadPublicData() {
     try {
-        const [statsRes, psRes, scheduleRes, announcementsRes, settingsRes] = await Promise.all([
-            fetch(`${API_BASE}/stats`),
-            fetch(`${API_BASE}/problem-statements`),
-            fetch(`${API_BASE}/schedule`),
-            fetch(`${API_BASE}/announcements`),
-            fetch(`${API_BASE}/settings`)
+        const results = await Promise.allSettled([
+            fetch(`${API_BASE}/stats`).then(r => r.ok ? r.json() : null),
+            fetch(`${API_BASE}/problem-statements`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE}/schedule`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE}/announcements`).then(r => r.ok ? r.json() : []),
+            fetch(`${API_BASE}/settings`).then(r => r.ok ? r.json() : {})
         ]);
 
-        const stats = await statsRes.json();
-        const ps = await psRes.json();
-        const schedule = await scheduleRes.json();
-        const announcements = await announcementsRes.json();
-        const settings = await settingsRes.json();
+        const stats = results[0].status === 'fulfilled' && results[0].value ? results[0].value : { totalTeams: 0, totalParticipants: 0, totalProblemStatements: 25, registrationOpen: true };
+        const ps = results[1].status === 'fulfilled' && Array.isArray(results[1].value) ? results[1].value : [];
+        const schedule = results[2].status === 'fulfilled' && Array.isArray(results[2].value) ? results[2].value : [];
+        const announcements = results[3].status === 'fulfilled' && Array.isArray(results[3].value) ? results[3].value : [];
+        const settings = results[4].status === 'fulfilled' && results[4].value ? results[4].value : {};
 
         problemStatements = ps;
-        registrationOpen = stats.registrationOpen;
+        registrationOpen = stats.registrationOpen !== false;
 
         // Update stats
-        animateCounter('statTeams', stats.totalTeams);
-        animateCounter('statParticipants', stats.totalParticipants);
-        animateCounter('statProblems', stats.totalProblemStatements);
+        if (stats) {
+            animateCounter('statTeams', stats.totalTeams || 0);
+            animateCounter('statParticipants', stats.totalParticipants || 0);
+            animateCounter('statProblems', stats.totalProblemStatements || ps.length || 25);
+        }
 
-        // Render sections
-        renderSchedule(schedule);
-        renderProblems(ps);
-        renderAnnouncements(announcements);
-        populateProblemSelect(ps);
-        updateSettings(settings);
+        // Render sections safely
+        if (schedule) renderSchedule(schedule);
+        if (ps) renderProblems(ps);
+        if (announcements) renderAnnouncements(announcements);
+        if (ps) populateProblemSelect(ps);
+        if (settings) updateSettings(settings);
 
         // Check registration status
         if (!registrationOpen) {
-            document.getElementById('registrationContainer').querySelector('.step-indicator').style.display = 'none';
-            document.getElementById('registrationForm').style.display = 'none';
-            document.getElementById('regClosed').style.display = 'block';
+            const rc = document.getElementById('registrationContainer');
+            if (rc) {
+                const si = rc.querySelector('.step-indicator');
+                if (si) si.style.display = 'none';
+            }
+            const rf = document.getElementById('registrationForm');
+            if (rf) rf.style.display = 'none';
+            const rcMsg = document.getElementById('regClosed');
+            if (rcMsg) rcMsg.style.display = 'block';
         }
 
     } catch (err) {
@@ -471,6 +510,9 @@ function renderAnnouncements(announcements) {
 // ====== Populate Problem Statement Select ======
 function populateProblemSelect(problems) {
     const select = document.getElementById('problemStatement');
+    if (!select) return;
+    // Reset options to prevent duplicate entries on repeated loads (Issue #12)
+    select.innerHTML = '<option value="">-- Choose a Problem Statement (Optional) --</option>';
     problems.forEach(p => {
         const option = document.createElement('option');
         option.value = p.id;
@@ -813,20 +855,24 @@ function initScrollAnimations() {
 
 // ====== Utility Functions ======
 function formatTime(datetime) {
+    if (!datetime) return '';
     try {
-        const d = new Date(datetime);
+        const d = new Date(typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T') ? datetime.replace(' ', 'T') : datetime);
+        if (isNaN(d.getTime())) return escapeHtml(String(datetime));
         return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     } catch {
-        return datetime;
+        return escapeHtml(String(datetime || ''));
     }
 }
 
 function formatDate(datetime) {
+    if (!datetime) return '';
     try {
-        const d = new Date(datetime);
+        const d = new Date(typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T') ? datetime.replace(' ', 'T') : datetime);
+        if (isNaN(d.getTime())) return escapeHtml(String(datetime));
         return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch {
-        return datetime;
+        return escapeHtml(String(datetime || ''));
     }
 }
 
@@ -834,6 +880,7 @@ function formatDateTime(datetime) {
     if (!datetime) return '';
     try {
         const d = new Date(typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T') ? datetime.replace(' ', 'T') : datetime);
+        if (isNaN(d.getTime())) return escapeHtml(String(datetime));
         return d.toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -844,7 +891,7 @@ function formatDateTime(datetime) {
             hour12: true
         });
     } catch {
-        return datetime;
+        return escapeHtml(String(datetime || ''));
     }
 }
 
@@ -859,7 +906,7 @@ function showToast(message, type = 'info') {
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.innerHTML = `<i class="${icons[type]}"></i><span>${message}</span>`;
+    toast.innerHTML = `<i class="${icons[type] || icons.info}"></i><span>${escapeHtml(message)}</span>`;
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -900,31 +947,31 @@ function openPSDetail(id) {
     const titleEl = document.getElementById('psDetailModalTitle');
     const bodyEl = document.getElementById('psDetailModalBody');
 
-    titleEl.innerHTML = `<i class="fas fa-file-code"></i> PS-${String(ps.ps_number || ps.id).padStart(3, '0')}: ${ps.title}`;
+    titleEl.innerHTML = `<i class="fas fa-file-code"></i> PS-${String(ps.ps_number || ps.id).padStart(3, '0')}: ${escapeHtml(ps.title)}`;
 
     bodyEl.innerHTML = `
         <div class="ps-detail-card">
             <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                <span class="problem-category"><i class="fas fa-tag"></i> ${ps.category}</span>
-                <span class="difficulty difficulty-${ps.difficulty}"><i class="fas fa-signal"></i> ${ps.difficulty}</span>
+                <span class="problem-category"><i class="fas fa-tag"></i> ${escapeHtml(ps.category)}</span>
+                <span class="difficulty difficulty-${escapeHtml(ps.difficulty)}"><i class="fas fa-signal"></i> ${escapeHtml(ps.difficulty)}</span>
             </div>
             
             <div class="ps-detail-section" style="margin-top: 0; padding-top: 0; border-top: none;">
                 <h5><i class="fas fa-bullseye"></i> Problem Statement</h5>
-                <p>${ps.description}</p>
+                <p>${escapeHtml(ps.description)}</p>
             </div>
 
             ${ps.problem_faced ? `
             <div class="ps-detail-section">
                 <h5><i class="fas fa-exclamation-triangle"></i> Problem Faced & Challenges</h5>
-                <p>${ps.problem_faced}</p>
+                <p>${escapeHtml(ps.problem_faced)}</p>
             </div>
             ` : ''}
 
             ${ps.suggested_solution ? `
             <div class="ps-detail-section">
                 <h5><i class="fas fa-lightbulb"></i> Suggested Approach & Solution</h5>
-                <p>${ps.suggested_solution}</p>
+                <p>${escapeHtml(ps.suggested_solution)}</p>
             </div>
             ` : ''}
         </div>
@@ -1104,10 +1151,10 @@ function renderTeamDashboard(data) {
         <!-- Top Team Bar -->
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(20,20,35,0.6); padding: 1rem 1.25rem; border-radius: var(--border-radius); border: 1px solid rgba(255,255,255,0.06); margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <span class="team-id-display" style="font-size: 1.4rem; margin: 0;">${team.team_code}</span>
+                <span class="team-id-display" style="font-size: 1.4rem; margin: 0;">${escapeHtml(team.team_code)}</span>
                 <div>
-                    <h4 style="margin: 0; color: var(--text-primary); font-size: 1.1rem;">${team.team_name}</h4>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fas fa-envelope"></i> ${team.team_lead_email}</span>
+                    <h4 style="margin: 0; color: var(--text-primary); font-size: 1.1rem;">${escapeHtml(team.team_name)}</h4>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);"><i class="fas fa-envelope"></i> ${escapeHtml(team.team_lead_email)}</span>
                 </div>
             </div>
             <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -1139,30 +1186,30 @@ function renderTeamDashboard(data) {
                 <div class="ps-detail-card" style="margin-bottom: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem;">
                         <span style="font-family: var(--font-display); font-weight: 700; color: var(--accent-cyan); font-size: 1.15rem;">
-                            PS-${String(ps.ps_number || ps.id).padStart(3, '0')}: ${ps.title}
+                            PS-${String(ps.ps_number || ps.id).padStart(3, '0')}: ${escapeHtml(ps.title)}
                         </span>
                         <div style="display: flex; gap: 0.5rem;">
-                            <span class="problem-category"><i class="fas fa-tag"></i> ${ps.category}</span>
-                            <span class="difficulty difficulty-${ps.difficulty}"><i class="fas fa-signal"></i> ${ps.difficulty}</span>
+                            <span class="problem-category"><i class="fas fa-tag"></i> ${escapeHtml(ps.category)}</span>
+                            <span class="difficulty difficulty-${escapeHtml(ps.difficulty)}"><i class="fas fa-signal"></i> ${escapeHtml(ps.difficulty)}</span>
                         </div>
                     </div>
 
                     <div class="ps-detail-section" style="margin-top: 0; padding-top: 0; border-top: none;">
                         <h5><i class="fas fa-bullseye"></i> Problem Statement</h5>
-                        <p>${ps.description}</p>
+                        <p>${escapeHtml(ps.description)}</p>
                     </div>
 
                     ${ps.problem_faced ? `
                     <div class="ps-detail-section">
                         <h5><i class="fas fa-exclamation-triangle"></i> Problem Faced & Challenges</h5>
-                        <p>${ps.problem_faced}</p>
+                        <p>${escapeHtml(ps.problem_faced)}</p>
                     </div>
                     ` : ''}
 
                     ${ps.suggested_solution ? `
                     <div class="ps-detail-section">
                         <h5><i class="fas fa-lightbulb"></i> Suggested Approach & Architecture</h5>
-                        <p>${ps.suggested_solution}</p>
+                        <p>${escapeHtml(ps.suggested_solution)}</p>
                     </div>
                     ` : ''}
                 </div>
@@ -1179,11 +1226,11 @@ function renderTeamDashboard(data) {
                     Your problem statement is queued. It will be <strong>shuffled and unlocked automatically with your 24-hour timer</strong> as soon as the Admin marks your team as Checked In at the venue desk!
                 </p>
                 <div style="display: flex; flex-direction: column; gap: 0.4rem; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.08); padding: 0.9rem 1.25rem; border-radius: 8px; font-size: 0.88rem; color: var(--text-secondary); max-width: 560px; margin: 0 auto; text-align: left;">
-                    <div><i class="fas fa-university" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Event:</strong> ${data.settings?.event_name || 'SYNAPSE'} - ${data.settings?.event_tagline || '24-Hour Hackathon'}</div>
-                    <div><i class="fas fa-microchip" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Dept:</strong> ${data.settings?.event_department || 'Department of AI & Data Science'}</div>
-                    <div><i class="fas fa-map-marker-alt" style="color: var(--accent-cyan); width: 20px;"></i> <strong>Venue:</strong> ${data.settings?.event_venue || 'V.S.B Engineering College, Karur'}</div>
+                    <div><i class="fas fa-university" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Event:</strong> ${escapeHtml(data.settings?.event_name || 'SYNAPSE')} - ${escapeHtml(data.settings?.event_tagline || '24-Hour Hackathon')}</div>
+                    <div><i class="fas fa-microchip" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Dept:</strong> ${escapeHtml(data.settings?.event_department || 'Department of AI & Data Science')}</div>
+                    <div><i class="fas fa-map-marker-alt" style="color: var(--accent-cyan); width: 20px;"></i> <strong>Venue:</strong> ${escapeHtml(data.settings?.event_venue || 'V.S.B Engineering College, Karur')}</div>
                     <div><i class="fas fa-calendar-check" style="color: var(--accent-green); width: 20px;"></i> <strong>Registered:</strong> ${formatDateTime(team.registered_at)}</div>
-                    <div><i class="fas fa-envelope" style="color: var(--accent-orange); width: 20px;"></i> <strong>Contact:</strong> ${data.settings?.contact_email || 'synapse@vsb.edu.in'} | ${data.settings?.contact_phone || '+91 98765 43210'}</div>
+                    <div><i class="fas fa-envelope" style="color: var(--accent-orange); width: 20px;"></i> <strong>Contact:</strong> ${escapeHtml(data.settings?.contact_email || 'synapse@vsb.edu.in')} | ${escapeHtml(data.settings?.contact_phone || '+91 98765 43210')}</div>
                 </div>
             </div>
         `}
@@ -1208,13 +1255,13 @@ function renderTeamDashboard(data) {
                         ${data.members.map(m => `
                             <tr>
                                 <td>
-                                    <strong>${m.name}</strong>
+                                    <strong>${escapeHtml(m.name)}</strong>
                                     ${m.is_leader ? '<span class="leader-badge"><i class="fas fa-crown"></i> Leader</span>' : ''}
                                 </td>
-                                <td>${m.email}</td>
-                                <td>${m.phone}</td>
-                                <td>${m.department} | ${m.year}</td>
-                                <td>${m.college}</td>
+                                <td>${escapeHtml(m.email)}</td>
+                                <td>${escapeHtml(m.phone)}</td>
+                                <td>${escapeHtml(m.department)} | ${escapeHtml(m.year)}</td>
+                                <td>${escapeHtml(m.college)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -1232,10 +1279,10 @@ function renderTeamDashboard(data) {
                     ${data.announcements.map(a => `
                         <div style="background: rgba(10,10,20,0.5); border-left: 3px solid ${a.priority === 'urgent' ? 'var(--accent-red)' : a.priority === 'high' ? 'var(--accent-orange)' : 'var(--accent-cyan)'}; padding: 0.75rem 1rem; border-radius: 6px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; flex-wrap: wrap; gap: 0.5rem;">
-                                <strong style="color: var(--text-primary); font-size: 0.9rem;">${a.title}</strong>
+                                <strong style="color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(a.title)}</strong>
                                 <span style="font-size: 0.75rem; color: var(--text-muted);"><i class="fas fa-clock"></i> ${formatDateTime(a.created_at)}</span>
                             </div>
-                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">${a.message}</p>
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">${escapeHtml(a.message)}</p>
                         </div>
                     `).join('')}
                 </div>
@@ -1258,12 +1305,12 @@ function renderTeamDashboard(data) {
                         return `
                         <div style="background: rgba(10,10,20,0.5); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
-                                <span class="event-type-badge badge-${s.event_type}" style="font-size: 0.65rem; padding: 0.15rem 0.5rem;">${s.event_type}</span>
+                                <span class="event-type-badge badge-${escapeHtml(s.event_type)}" style="font-size: 0.65rem; padding: 0.15rem 0.5rem;">${escapeHtml(s.event_type)}</span>
                                 <span style="font-size: 0.75rem; color: var(--accent-cyan); font-family: var(--font-mono);">${timeStr}</span>
                             </div>
-                            <strong style="display: block; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.2rem;">${s.title}</strong>
-                            ${s.description ? `<p style="margin: 0 0 0.3rem 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">${s.description}</p>` : ''}
-                            <span style="font-size: 0.72rem; color: var(--text-muted); display: block;"><i class="fas fa-map-marker-alt"></i> ${s.location || 'Venue'}</span>
+                            <strong style="display: block; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(s.title)}</strong>
+                            ${s.description ? `<p style="margin: 0 0 0.3rem 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">${escapeHtml(s.description)}</p>` : ''}
+                            <span style="font-size: 0.72rem; color: var(--text-muted); display: block;"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(s.location || 'Venue')}</span>
                         </div>
                         `;
                     }).join('')}
@@ -1287,14 +1334,14 @@ function renderTeamDashboard(data) {
                         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
                             <i class="fab fa-github"></i> GitHub Repository URL
                         </label>
-                        <input type="url" id="sub_repo" value="${team.project_repo || ''}" placeholder="https://github.com/..." 
+                        <input type="url" id="sub_repo" value="${escapeHtml(team.project_repo || '')}" placeholder="https://github.com/..." 
                                style="width: 100%; padding: 0.65rem 0.9rem; border-radius: 8px; background: rgba(10,10,15,0.6); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 0.9rem;">
                     </div>
                     <div class="form-group">
                         <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
                             <i class="fas fa-globe"></i> Live Demo / Video / Presentation Link
                         </label>
-                        <input type="url" id="sub_demo" value="${team.project_demo || ''}" placeholder="https://..." 
+                        <input type="url" id="sub_demo" value="${escapeHtml(team.project_demo || '')}" placeholder="https://..." 
                                style="width: 100%; padding: 0.65rem 0.9rem; border-radius: 8px; background: rgba(10,10,15,0.6); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 0.9rem;">
                     </div>
                 </div>
@@ -1315,7 +1362,7 @@ function renderTeamDashboard(data) {
                     ${team.submission_file_url ? `
                         <div id="uploadedFileLink" style="margin-top: 0.6rem; padding: 0.5rem 0.8rem; background: rgba(108,92,231,0.15); border: 1px solid rgba(108,92,231,0.3); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                             <span style="font-size: 0.82rem; color: #a29bfe;"><i class="fas fa-check-circle" style="color: var(--accent-green);"></i> Active File Stored in Cloud</span>
-                            <a href="${team.submission_file_url}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; text-decoration: none;">
+                            <a href="${safeUrl(team.submission_file_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; text-decoration: none;">
                                 <i class="fas fa-external-link-alt"></i> View / Download Stored File
                             </a>
                         </div>
@@ -1328,7 +1375,7 @@ function renderTeamDashboard(data) {
                         <i class="fas fa-sticky-note"></i> Tech Stack & Implementation Notes
                     </label>
                     <textarea id="sub_notes" rows="2" placeholder="Mention libraries, AI models, and architecture used..." 
-                              style="width: 100%; padding: 0.65rem 0.9rem; border-radius: 8px; background: rgba(10,10,15,0.6); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 0.9rem;">${team.submission_notes || ''}</textarea>
+                              style="width: 100%; padding: 0.65rem 0.9rem; border-radius: 8px; background: rgba(10,10,15,0.6); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 0.9rem;">${escapeHtml(team.submission_notes || '')}</textarea>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm" id="subBtn">
                     <i class="fas fa-save"></i> Save Submission Details
@@ -1349,7 +1396,13 @@ function startCountdownTimer(startTimeStr) {
     const timerEl = document.getElementById('countdownTimerText');
     if (!timerEl) return;
 
-    const startTime = new Date(startTimeStr).getTime();
+    const parsedDate = new Date(typeof startTimeStr === 'string' && startTimeStr.includes(' ') && !startTimeStr.includes('T') ? startTimeStr.replace(' ', 'T') : startTimeStr);
+    const startTime = parsedDate.getTime();
+    if (isNaN(startTime)) {
+        timerEl.textContent = 'Active';
+        return;
+    }
+
     // 24 Hours duration in milliseconds
     const duration = 24 * 60 * 60 * 1000;
     const endTime = startTime + duration;

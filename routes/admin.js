@@ -7,6 +7,7 @@ const path = require('path');
 const { getDb } = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
 const { isSupabaseConfigured, getSupabase, uploadToSupabaseStorage, listSupabaseFiles, deleteFromSupabaseStorage } = require('../db/supabase');
+const supabaseData = require('../db/supabaseData');
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ function allocateShuffledProblemStatement(db, currentPsId) {
     const activeStatements = db.prepare(`
         SELECT ps.id, COUNT(t.id) as team_count
         FROM problem_statements ps
-        LEFT JOIN teams t ON t.problem_statement_id = ps.id
+        LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
         WHERE ps.is_active = 1
         GROUP BY ps.id
         ORDER BY team_count ASC
@@ -40,11 +41,28 @@ function allocateShuffledProblemStatement(db, currentPsId) {
 }
 
 // Admin Login
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password required' });
+        }
+
+        // Supabase-first check
+        if (isSupabaseConfigured()) {
+            try {
+                const supaAdmin = await supabaseData.getAdminByEmail(email);
+                if (supaAdmin && bcrypt.compareSync(password, supaAdmin.password)) {
+                    const token = jwt.sign(
+                        { id: supaAdmin.id, email: supaAdmin.email, name: supaAdmin.name, role: 'admin' },
+                        process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
+                        { expiresIn: '24h' }
+                    );
+                    return res.json({ token, admin: { id: supaAdmin.id, email: supaAdmin.email, name: supaAdmin.name } });
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase admin check note:', supaErr.message);
+            }
         }
 
         const db = getDb();
@@ -55,7 +73,7 @@ router.post('/login', (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: admin.id, email: admin.email, name: admin.name },
+            { id: admin.id, email: admin.email, name: admin.name, role: 'admin' },
             process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
             { expiresIn: '24h' }
         );
@@ -67,8 +85,17 @@ router.post('/login', (req, res) => {
 });
 
 // Get Dashboard Stats
-router.get('/stats', authenticateToken, (req, res) => {
+router.get('/stats', authenticateToken, async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            try {
+                const stats = await supabaseData.getAdminStats();
+                if (stats) return res.json(stats);
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase admin stats note:', supaErr.message);
+            }
+        }
+
         const db = getDb();
         const totalTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
         const approvedTeams = db.prepare("SELECT COUNT(*) as count FROM teams WHERE status = 'approved'").get().count;
@@ -106,7 +133,7 @@ router.get('/stats', authenticateToken, (req, res) => {
         const psStats = db.prepare(`
             SELECT ps.ps_number, ps.title, ps.category, COUNT(t.id) as team_count
             FROM problem_statements ps
-            LEFT JOIN teams t ON t.problem_statement_id = ps.id
+            LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
             WHERE ps.is_active = 1
             GROUP BY ps.id
             ORDER BY team_count DESC, ps.ps_number ASC
@@ -149,11 +176,20 @@ router.get('/stats', authenticateToken, (req, res) => {
 });
 
 // Get all teams
-router.get('/teams', authenticateToken, (req, res) => {
+router.get('/teams', authenticateToken, async (req, res) => {
     try {
-        const db = getDb();
         const { status, search } = req.query;
 
+        if (isSupabaseConfigured()) {
+            try {
+                const teams = await supabaseData.getAdminTeams({ status, search });
+                if (teams) return res.json(teams);
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase admin teams note:', supaErr.message);
+            }
+        }
+
+        const db = getDb();
         let query = `
             SELECT t.*, ps.ps_number, ps.title as problem_statement_title, ps.category as problem_statement_category
             FROM teams t
@@ -191,30 +227,44 @@ router.get('/teams', authenticateToken, (req, res) => {
 });
 
 // Update team status (with automatic problem statement shuffle on check-in)
-router.patch('/teams/:id/status', authenticateToken, (req, res) => {
+const handleTeamStatusUpdate = async (req, res) => {
     try {
         const { status } = req.body;
         if (!['registered', 'approved', 'rejected', 'checked_in'].includes(status)) {
             return res.status(400).json({ error: 'Invalid status' });
         }
-        const db = getDb();
-        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
-        if (!team) return res.status(404).json({ error: 'Team not found' });
 
-        let assignedPsId = team.problem_statement_id;
-        let checkedInAt = team.checked_in_at;
+        let assignedPsId = null;
+        let checkedInAt = null;
 
-        if (status === 'checked_in') {
-            if (!checkedInAt) {
-                checkedInAt = new Date().toISOString();
-            }
-            if (!assignedPsId) {
-                assignedPsId = allocateShuffledProblemStatement(db, null);
+        if (isSupabaseConfigured()) {
+            try {
+                const supaResult = await supabaseData.updateAdminTeamStatus(req.params.id, status);
+                if (supaResult) {
+                    assignedPsId = supaResult.problem_statement_id;
+                    checkedInAt = supaResult.checked_in_at;
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase team status update note:', supaErr.message);
             }
         }
 
-        db.prepare('UPDATE teams SET status = ?, problem_statement_id = ?, checked_in_at = ? WHERE id = ?')
-            .run(status, assignedPsId, checkedInAt, req.params.id);
+        // Mirror to local SQLite if available
+        try {
+            const db = getDb();
+            const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+            if (team) {
+                if (status === 'checked_in') {
+                    if (!checkedInAt) checkedInAt = new Date().toISOString();
+                    if (!assignedPsId) assignedPsId = allocateShuffledProblemStatement(db, null);
+                } else {
+                    assignedPsId = null;
+                    checkedInAt = null;
+                }
+                db.prepare('UPDATE teams SET status = ?, problem_statement_id = ?, checked_in_at = ? WHERE id = ?')
+                    .run(status, assignedPsId, checkedInAt, req.params.id);
+            }
+        } catch (dbErr) {}
 
         res.json({
             message: 'Status updated successfully',
@@ -226,29 +276,48 @@ router.patch('/teams/:id/status', authenticateToken, (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
-});
+};
+
+router.patch('/teams/:id/status', authenticateToken, handleTeamStatusUpdate);
+router.put('/teams/:id/status', authenticateToken, handleTeamStatusUpdate);
 
 // Single-click Check-in for team (with shuffle & timestamp)
-router.post('/teams/:id/checkin', authenticateToken, (req, res) => {
+router.post('/teams/:id/checkin', authenticateToken, async (req, res) => {
     try {
-        const db = getDb();
-        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
-        if (!team) return res.status(404).json({ error: 'Team not found' });
+        let assignedPsId = null;
+        let checkedInAt = new Date().toISOString();
+        let assignedPS = null;
 
-        const checkedInAt = new Date().toISOString();
-        let assignedPsId = team.problem_statement_id;
-
-        if (!assignedPsId) {
-            assignedPsId = allocateShuffledProblemStatement(db, null);
+        if (isSupabaseConfigured()) {
+            try {
+                const checkinResult = await supabaseData.checkinAdminTeam(req.params.id);
+                if (checkinResult) {
+                    assignedPsId = checkinResult.problem_statement_id;
+                    checkedInAt = checkinResult.checked_in_at;
+                    const { data: ps } = await getSupabase().from('problem_statements').select('*').eq('id', assignedPsId).single();
+                    assignedPS = ps || null;
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase checkin note:', supaErr.message);
+            }
         }
 
-        db.prepare("UPDATE teams SET status = 'checked_in', problem_statement_id = ?, checked_in_at = ? WHERE id = ?")
-            .run(assignedPsId, checkedInAt, req.params.id);
-
-        const assignedPS = assignedPsId ? db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(assignedPsId) : null;
+        // Mirror to SQLite
+        try {
+            const db = getDb();
+            const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+            if (team) {
+                if (!assignedPsId) assignedPsId = allocateShuffledProblemStatement(db, null);
+                db.prepare("UPDATE teams SET status = 'checked_in', problem_statement_id = ?, checked_in_at = ? WHERE id = ?")
+                    .run(assignedPsId, checkedInAt, req.params.id);
+                if (!assignedPS && assignedPsId) {
+                    assignedPS = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(assignedPsId);
+                }
+            }
+        } catch (dbErr) {}
 
         res.json({
-            message: `Team ${team.team_code} checked in successfully!`,
+            message: `Team checked in successfully!`,
             status: 'checked_in',
             checked_in_at: checkedInAt,
             problem_statement: assignedPS
@@ -260,26 +329,42 @@ router.post('/teams/:id/checkin', authenticateToken, (req, res) => {
 });
 
 // Re-shuffle or assign problem statement to a team
-router.post('/teams/:id/shuffle-ps', authenticateToken, (req, res) => {
+router.post('/teams/:id/shuffle-ps', authenticateToken, async (req, res) => {
     try {
-        const db = getDb();
-        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
-        if (!team) return res.status(404).json({ error: 'Team not found' });
-
         const { problem_statement_id } = req.body;
-        let newPsId;
+        let assignedPS = null;
 
-        if (problem_statement_id) {
-            newPsId = parseInt(problem_statement_id);
-        } else {
-            newPsId = allocateShuffledProblemStatement(db, team.problem_statement_id);
+        if (isSupabaseConfigured()) {
+            try {
+                if (problem_statement_id) {
+                    const psId = parseInt(problem_statement_id, 10);
+                    await getSupabase().from('teams').update({ problem_statement_id: psId }).eq('id', req.params.id);
+                    const { data: ps } = await getSupabase().from('problem_statements').select('*').eq('id', psId).single();
+                    assignedPS = ps;
+                } else {
+                    const realloc = await supabaseData.reallocateAdminTeam(req.params.id);
+                    if (realloc) assignedPS = realloc.problemStatement;
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase shuffle-ps note:', supaErr.message);
+            }
         }
 
-        db.prepare('UPDATE teams SET problem_statement_id = ? WHERE id = ?').run(newPsId, req.params.id);
-        const assignedPS = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(newPsId);
+        // Mirror to SQLite
+        try {
+            const db = getDb();
+            const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id);
+            if (team) {
+                let newPsId = assignedPS ? assignedPS.id : (problem_statement_id ? parseInt(problem_statement_id, 10) : allocateShuffledProblemStatement(db, team.problem_statement_id));
+                db.prepare('UPDATE teams SET problem_statement_id = ? WHERE id = ?').run(newPsId, req.params.id);
+                if (!assignedPS) {
+                    assignedPS = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(newPsId);
+                }
+            }
+        } catch (dbErr) {}
 
         res.json({
-            message: `Problem statement assigned to team ${team.team_code}!`,
+            message: `Problem statement assigned successfully!`,
             problem_statement: assignedPS
         });
     } catch (err) {
@@ -289,10 +374,20 @@ router.post('/teams/:id/shuffle-ps', authenticateToken, (req, res) => {
 });
 
 // Delete team
-router.delete('/teams/:id', authenticateToken, (req, res) => {
+router.delete('/teams/:id', authenticateToken, async (req, res) => {
     try {
-        const db = getDb();
-        db.prepare('DELETE FROM teams WHERE id = ?').run(req.params.id);
+        if (isSupabaseConfigured()) {
+            try {
+                await supabaseData.deleteAdminTeam(req.params.id);
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase delete team note:', supaErr.message);
+            }
+        }
+        try {
+            const db = getDb();
+            db.prepare('DELETE FROM teams WHERE id = ?').run(req.params.id);
+        } catch (dbErr) {}
+
         res.json({ message: 'Team deleted' });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -448,8 +543,14 @@ router.delete('/schedule/:id', authenticateToken, (req, res) => {
 });
 
 // Event Settings
-router.get('/settings', authenticateToken, (req, res) => {
+router.get('/settings', authenticateToken, async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            try {
+                const settingsObj = await supabaseData.getEventSettings();
+                if (settingsObj) return res.json(settingsObj);
+            } catch (supaErr) {}
+        }
         const db = getDb();
         const settings = db.prepare('SELECT * FROM event_settings').all();
         const settingsObj = {};
@@ -460,8 +561,17 @@ router.get('/settings', authenticateToken, (req, res) => {
     }
 });
 
-router.put('/settings', authenticateToken, (req, res) => {
+router.put('/settings', authenticateToken, async (req, res) => {
     try {
+        if (isSupabaseConfigured()) {
+            try {
+                const supabase = getSupabase();
+                const upsertList = Object.entries(req.body).map(([key, value]) => ({ key, value: String(value) }));
+                await supabase.from('event_settings').upsert(upsertList, { onConflict: 'key' });
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase settings upsert note:', supaErr.message);
+            }
+        }
         const db = getDb();
         const upsert = db.prepare('INSERT INTO event_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?');
         const updateMany = db.transaction((settings) => {
@@ -477,31 +587,108 @@ router.put('/settings', authenticateToken, (req, res) => {
 });
 
 // Export teams as CSV
-router.get('/export/teams', authenticateToken, (req, res) => {
+const handleExportTeams = async (req, res) => {
     try {
-        const db = getDb();
-        const teams = db.prepare(`
-            SELECT t.id, t.team_code, t.team_name, t.team_lead_email, t.team_size, t.status, 
-                   t.registered_at, t.checked_in_at, t.project_repo, t.project_demo, t.submission_file_url,
-                   ps.ps_number, ps.title as problem_statement, ps.category as ps_category
-            FROM teams t
-            LEFT JOIN problem_statements ps ON t.problem_statement_id = ps.id
-            ORDER BY t.registered_at DESC
-        `).all();
+        let teams = [];
+        let members = [];
 
-        const members = db.prepare(`
-            SELECT tm.*, t.team_name, t.team_code
-            FROM team_members tm
-            JOIN teams t ON tm.team_id = t.id
-            ORDER BY t.id, tm.is_leader DESC
-        `).all();
+        if (isSupabaseConfigured()) {
+            try {
+                const supaTeams = await supabaseData.getAdminTeams();
+                if (supaTeams && supaTeams.length > 0) {
+                    teams = supaTeams.map(t => ({
+                        ...t,
+                        problem_statement: t.problem_statement_title,
+                        ps_category: t.problem_statement_category
+                    }));
+                    members = [];
+                    supaTeams.forEach(t => {
+                        (t.members || []).forEach(m => {
+                            members.push({ ...m, team_id: t.id, team_name: t.team_name, team_code: t.team_code });
+                        });
+                    });
+                }
+            } catch (supaErr) {}
+        }
+
+        if (teams.length === 0) {
+            const db = getDb();
+            teams = db.prepare(`
+                SELECT t.id, t.team_code, t.team_name, t.team_lead_email, t.team_size, t.status, 
+                       t.registered_at, t.checked_in_at, t.project_repo, t.project_demo, t.submission_file_url,
+                       ps.ps_number, ps.title as problem_statement, ps.category as ps_category
+                FROM teams t
+                LEFT JOIN problem_statements ps ON t.problem_statement_id = ps.id
+                ORDER BY t.registered_at DESC
+            `).all();
+
+            members = db.prepare(`
+                SELECT tm.*, t.team_name, t.team_code
+                FROM team_members tm
+                JOIN teams t ON tm.team_id = t.id
+                ORDER BY t.id, tm.is_leader DESC
+            `).all();
+        }
+
+        function csvEscape(val) {
+            if (val === null || val === undefined) return '""';
+            let str = String(val).replace(/[\r\n]+/g, ' ');
+            // Prevent formula injection in spreadsheet software
+            if (/^[=+\-@\t\r]/.test(str)) {
+                str = "'" + str;
+            }
+            return `"${str.replace(/"/g, '""')}"`;
+        }
 
         // CSV header
         let csv = 'Team ID,Team Name,Team Lead Email,Team Size,Status,Problem Statement Number,Problem Statement,Category,Registered At,Checked In At,Project Repo,Project Demo,Submission File URL,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
 
-        members.forEach(m => {
-            const team = teams.find(t => t.id === m.team_id);
-            csv += `"${team.team_code || ''}","${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.ps_number || ''}","${team.problem_statement || 'Pending Check-in'}","${team.ps_category || ''}","${team.registered_at || ''}","${team.checked_in_at || ''}","${team.project_repo || ''}","${team.project_demo || ''}","${team.submission_file_url || ''}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
+        teams.forEach(team => {
+            const teamMembers = members.filter(m => m.team_id === team.id);
+            if (teamMembers.length === 0) {
+                // Team with no members
+                csv += [
+                    csvEscape(team.team_code || ''),
+                    csvEscape(team.team_name),
+                    csvEscape(team.team_lead_email),
+                    team.team_size || 0,
+                    csvEscape(team.status),
+                    csvEscape(team.ps_number || ''),
+                    csvEscape(team.problem_statement || 'Pending Check-in'),
+                    csvEscape(team.ps_category || ''),
+                    csvEscape(team.registered_at || ''),
+                    csvEscape(team.checked_in_at || ''),
+                    csvEscape(team.project_repo || ''),
+                    csvEscape(team.project_demo || ''),
+                    csvEscape(team.submission_file_url || ''),
+                    '""', '""', '""', '""', '""', '""', '""'
+                ].join(',') + '\n';
+            } else {
+                teamMembers.forEach(m => {
+                    csv += [
+                        csvEscape(team.team_code || ''),
+                        csvEscape(team.team_name),
+                        csvEscape(team.team_lead_email),
+                        team.team_size || 0,
+                        csvEscape(team.status),
+                        csvEscape(team.ps_number || ''),
+                        csvEscape(team.problem_statement || 'Pending Check-in'),
+                        csvEscape(team.ps_category || ''),
+                        csvEscape(team.registered_at || ''),
+                        csvEscape(team.checked_in_at || ''),
+                        csvEscape(team.project_repo || ''),
+                        csvEscape(team.project_demo || ''),
+                        csvEscape(team.submission_file_url || ''),
+                        csvEscape(m.name),
+                        csvEscape(m.email),
+                        csvEscape(m.phone),
+                        csvEscape(m.year),
+                        csvEscape(m.department),
+                        csvEscape(m.college),
+                        m.is_leader ? '"Yes"' : '"No"'
+                    ].join(',') + '\n';
+                });
+            }
         });
 
         res.setHeader('Content-Type', 'text/csv');
@@ -511,7 +698,10 @@ router.get('/export/teams', authenticateToken, (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
-});
+};
+
+router.get('/export/teams', authenticateToken, handleExportTeams);
+router.get('/teams/export', authenticateToken, handleExportTeams);
 
 // Admin File Upload to Supabase Storage (Materials, Schedule PDF, Guidelines)
 router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {

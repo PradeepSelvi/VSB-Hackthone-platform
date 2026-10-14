@@ -3,12 +3,30 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'synapse.db');
+const DB_PATH = process.env.VERCEL
+    ? path.join('/tmp', 'synapse.db')
+    : path.join(__dirname, '..', 'data', 'synapse.db');
 
 // Ensure data directory exists
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+    try {
+        fs.mkdirSync(dataDir, { recursive: true });
+    } catch (e) {
+        // Ignored in read-only environment
+    }
+}
+
+// In Vercel serverless environment, copy seed database to /tmp if not yet created
+if (process.env.VERCEL) {
+    const seedPath = path.join(__dirname, '..', 'data', 'synapse.db');
+    if (fs.existsSync(seedPath) && !fs.existsSync(DB_PATH)) {
+        try {
+            fs.copyFileSync(seedPath, DB_PATH);
+        } catch (e) {
+            console.warn('Could not copy seed DB to /tmp:', e.message);
+        }
+    }
 }
 
 let db;
@@ -16,8 +34,13 @@ let db;
 function getDb() {
     if (!db) {
         db = new Database(DB_PATH);
-        db.pragma('journal_mode = WAL');
+        if (process.env.VERCEL) {
+            db.pragma('journal_mode = DELETE');
+        } else {
+            db.pragma('journal_mode = WAL');
+        }
         db.pragma('foreign_keys = ON');
+        db.pragma('busy_timeout = 5000');
     }
     return db;
 }
@@ -28,7 +51,7 @@ function parseProblemStatementsFromMarkdown() {
     if (!fs.existsSync(psFile)) return [];
 
     const content = fs.readFileSync(psFile, 'utf-8');
-    const regex = /#\s*(\d+)\\\.\s*([^\r\n]+)([\s\S]*?)(?=(?:#\s*\d+\\\.)|$)/g;
+    const regex = /#\s*(\d+)(?:\\\.|[\.\-])\s*([^\r\n]+)([\s\S]*?)(?=(?:#\s*\d+(?:\\\.|[\.\-]))|$)/g;
     let match;
     const statements = [];
 
@@ -238,11 +261,11 @@ function initializeDatabase() {
         }
     }
 
-    // Seed real Problem Statements from vsb_hackathon_ps.md (removing old mock problem statements)
+    // Seed real Problem Statements from vsb_hackathon_ps.md (only on initial setup or if legacy mock statements exist)
     const mockCheck = db.prepare("SELECT COUNT(*) as count FROM problem_statements WHERE title = 'Smart Campus Navigation'").get();
     const psCount = db.prepare('SELECT COUNT(*) as count FROM problem_statements').get().count;
 
-    if (mockCheck.count > 0 || psCount < 20) {
+    if (mockCheck.count > 0 || psCount === 0) {
         console.log('🔄 Loading official VSB Hackathon problem statements from vsb_hackathon_ps.md...');
         const parsedPS = parseProblemStatementsFromMarkdown();
 
