@@ -165,6 +165,16 @@ function revealPageCards(container) {
     });
 }
 
+// ====== Admin Shortcut (Ctrl + Shift + A) ======
+function initAdminShortcut() {
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a' || e.code === 'KeyA')) {
+            e.preventDefault();
+            window.location.href = '/admin.html';
+        }
+    });
+}
+
 // ====== Initialize ======
 document.addEventListener('DOMContentLoaded', () => {
     initParticles();
@@ -175,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPublicData();
     initRegistrationForm();
     initScrollAnimations();
+    initAdminShortcut();
 });
 
 // ====== Falling-apart Hero Title (hover each letter -> plunge to bottom) ======

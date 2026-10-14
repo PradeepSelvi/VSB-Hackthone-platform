@@ -1,0 +1,672 @@
+const { getSupabase, isSupabaseConfigured } = require('./supabase');
+
+/**
+ * Service to interact directly with Supabase PostgreSQL as the primary database.
+ * Bypasses local ephemeral storage on Vercel and guarantees real-time persistent data.
+ */
+
+// ==========================================
+// 1. PUBLIC QUERIES
+// ==========================================
+
+async function getProblemStatements() {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from('problem_statements')
+        .select('*')
+        .eq('is_active', 1)
+        .order('ps_number', { ascending: true })
+        .order('category')
+        .order('title');
+
+    if (error) throw error;
+    return data;
+}
+
+async function getAnnouncements(limit = 20) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', 1)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) throw error;
+    return data;
+}
+
+async function getSchedule() {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from('schedule')
+        .select('*')
+        .eq('is_active', 1)
+        .order('start_time', { ascending: true });
+
+    if (error) throw error;
+    return data;
+}
+
+async function getEventSettings() {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from('event_settings')
+        .select('*');
+
+    if (error) throw error;
+    const settingsObj = {};
+    (data || []).forEach(s => { settingsObj[s.key] = s.value; });
+    return settingsObj;
+}
+
+async function getPublicStats() {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const [teamsRes, membersRes, psRes, settingsRes] = await Promise.all([
+        supabase.from('teams').select('*', { count: 'exact', head: true }),
+        supabase.from('team_members').select('*', { count: 'exact', head: true }),
+        supabase.from('problem_statements').select('*', { count: 'exact', head: true }).eq('is_active', 1),
+        supabase.from('event_settings').select('*')
+    ]);
+
+    const settingsObj = {};
+    (settingsRes.data || []).forEach(s => { settingsObj[s.key] = s.value; });
+
+    return {
+        totalTeams: teamsRes.count || 0,
+        totalParticipants: membersRes.count || 0,
+        totalProblemStatements: psRes.count || 25,
+        maxTeams: parseInt(settingsObj.max_teams) || 50,
+        registrationOpen: settingsObj.registration_open === '1'
+    };
+}
+
+// ==========================================
+// 2. REGISTRATION
+// ==========================================
+
+async function checkRegistrationEligibility(teamName, emails) {
+    const supabase = getSupabase();
+    if (!supabase) return { ok: true };
+
+    // 1. Check settings
+    const settings = await getEventSettings();
+    if (settings && settings.registration_open !== '1') {
+        return { ok: false, error: 'Registration is currently closed.' };
+    }
+
+    const maxTeams = parseInt(settings?.max_teams) || 50;
+    const { count: currentTeamsCount } = await supabase
+        .from('teams')
+        .select('*', { count: 'exact', head: true });
+
+    if (currentTeamsCount >= maxTeams) {
+        return { ok: false, error: 'Maximum number of teams reached. Registration is full.' };
+    }
+
+    // 2. Check duplicate team name (case-insensitive)
+    const { data: teamDup } = await supabase
+        .from('teams')
+        .select('id, team_name')
+        .ilike('team_name', teamName.trim())
+        .limit(1);
+
+    if (teamDup && teamDup.length > 0) {
+        return { ok: false, error: 'Team name already taken. Please choose a different name.' };
+    }
+
+    // 3. Check duplicate member emails
+    for (const email of emails) {
+        const { data: emailDup } = await supabase
+            .from('team_members')
+            .select('id, email')
+            .ilike('email', email.trim())
+            .limit(1);
+
+        if (emailDup && emailDup.length > 0) {
+            return { ok: false, error: `Email ${email} is already registered with another team.` };
+        }
+    }
+
+    return { ok: true };
+}
+
+async function registerTeamInSupabase({ team_name, problem_statement_id, members, leaderEmail, hashedPassword }) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase client not available');
+
+    // Generate unique team code SYN###
+    const { data: allTeams } = await supabase
+        .from('teams')
+        .select('id, team_code');
+
+    let maxNum = 0;
+    (allTeams || []).forEach(t => {
+        if (t.team_code) {
+            const m = t.team_code.match(/SYN(\d+)/i);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (n > maxNum) maxNum = n;
+            }
+        }
+        if (t.id && t.id > maxNum) {
+            maxNum = Math.max(maxNum, t.id);
+        }
+    });
+
+    const nextCode = 'SYN' + String(maxNum + 1).padStart(3, '0');
+
+    // Insert Team
+    const { data: newTeam, error: teamErr } = await supabase
+        .from('teams')
+        .insert({
+            team_code: nextCode,
+            team_name: team_name.trim(),
+            team_lead_email: leaderEmail.trim(),
+            team_size: members.length,
+            password: hashedPassword,
+            problem_statement_id: problem_statement_id ? Number(problem_statement_id) : null,
+            status: 'registered'
+        })
+        .select()
+        .single();
+
+    if (teamErr) throw teamErr;
+
+    // Insert Members
+    const membersPayload = members.map(m => ({
+        team_id: newTeam.id,
+        name: m.name.trim(),
+        email: m.email.trim(),
+        phone: m.phone.trim(),
+        year: m.year.trim(),
+        department: m.department.trim(),
+        college: m.college.trim(),
+        is_leader: m.email.trim().toLowerCase() === leaderEmail.trim().toLowerCase() ? 1 : 0
+    }));
+
+    const { error: membersErr } = await supabase
+        .from('team_members')
+        .insert(membersPayload);
+
+    if (membersErr) {
+        console.error('Error inserting team members:', membersErr);
+        // Rollback team if member insert fails
+        await supabase.from('teams').delete().eq('id', newTeam.id);
+        throw membersErr;
+    }
+
+    return {
+        teamId: newTeam.id,
+        teamCode: newTeam.team_code,
+        teamName: newTeam.team_name
+    };
+}
+
+// ==========================================
+// 3. TEAM AUTH & DASHBOARD
+// ==========================================
+
+async function findTeamForLogin(identifier) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    let normalizedCode = identifier.toUpperCase().replace(/[\s-_]/g, '');
+    const numMatch = normalizedCode.match(/^(?:SYN)?(\d+)$/);
+    if (numMatch) {
+        normalizedCode = 'SYN' + numMatch[1].padStart(3, '0');
+    }
+
+    // 1. Direct match on team_code, team_name, or team_lead_email
+    const { data: teams, error } = await supabase
+        .from('teams')
+        .select('*')
+        .or(`team_code.ilike.${normalizedCode},team_code.ilike.${identifier},team_lead_email.ilike.${identifier},team_name.ilike.${identifier}`);
+
+    if (teams && teams.length > 0) {
+        return teams[0];
+    }
+
+    // 2. Check if identifier is any member's email
+    const { data: memberMatches } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .ilike('email', identifier)
+        .limit(1);
+
+    if (memberMatches && memberMatches.length > 0) {
+        const { data: matchedTeam } = await supabase
+            .from('teams')
+            .select('*')
+            .eq('id', memberMatches[0].team_id)
+            .single();
+
+        return matchedTeam || null;
+    }
+
+    return null;
+}
+
+async function updateTeamPassword(teamId, newHash) {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    await supabase.from('teams').update({ password: newHash }).eq('id', teamId);
+}
+
+async function getTeamDashboardData(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    // Fetch team
+    const { data: team, error: teamErr } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+
+    if (teamErr || !team) return null;
+
+    // Fetch members
+    const { data: members } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('is_leader', { ascending: false })
+        .order('id', { ascending: true });
+
+    // Handle problem statement allocation if checked-in
+    let problemStatement = null;
+    if (team.status === 'checked_in') {
+        if (!team.problem_statement_id) {
+            const assignedPsId = await allocateShuffledProblemStatementInSupabase(team.problem_statement_id);
+            if (assignedPsId) {
+                const now = new Date().toISOString();
+                await supabase.from('teams').update({
+                    problem_statement_id: assignedPsId,
+                    checked_in_at: team.checked_in_at || now
+                }).eq('id', team.id);
+                team.problem_statement_id = assignedPsId;
+                team.checked_in_at = team.checked_in_at || now;
+            }
+        }
+
+        if (team.problem_statement_id) {
+            const { data: ps } = await supabase
+                .from('problem_statements')
+                .select('*')
+                .eq('id', team.problem_statement_id)
+                .single();
+            problemStatement = ps || null;
+        }
+    }
+
+    // Announcements, schedule, settings, counts
+    const [announcementsRes, scheduleRes, settingsRes, totalTeamsRes, checkedInRes] = await Promise.all([
+        supabase.from('announcements').select('*').eq('is_active', 1).order('created_at', { ascending: false }).limit(10),
+        supabase.from('schedule').select('*').eq('is_active', 1).order('start_time', { ascending: true }),
+        supabase.from('event_settings').select('*'),
+        supabase.from('teams').select('*', { count: 'exact', head: true }),
+        supabase.from('teams').select('*', { count: 'exact', head: true }).eq('status', 'checked_in')
+    ]);
+
+    const settings = {};
+    (settingsRes.data || []).forEach(s => { settings[s.key] = s.value; });
+
+    return {
+        team,
+        members: members || [],
+        problem_statement: problemStatement,
+        isCheckedIn: team.status === 'checked_in',
+        announcements: announcementsRes.data || [],
+        schedule: scheduleRes.data || [],
+        settings,
+        event_stats: {
+            totalTeams: totalTeamsRes.count || 0,
+            checkedInTeams: checkedInRes.count || 0
+        }
+    };
+}
+
+async function updateTeamSubmission(teamId, { project_repo, project_demo, submission_notes, submission_file_url }) {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    const payload = {};
+    if (project_repo !== undefined) payload.project_repo = project_repo;
+    if (project_demo !== undefined) payload.project_demo = project_demo;
+    if (submission_notes !== undefined) payload.submission_notes = submission_notes;
+    if (submission_file_url) payload.submission_file_url = submission_file_url;
+
+    const { error } = await supabase.from('teams').update(payload).eq('id', teamId);
+    if (error) throw error;
+    return true;
+}
+
+// ==========================================
+// 4. ALLOCATION ALGORITHM IN SUPABASE
+// ==========================================
+
+async function allocateShuffledProblemStatementInSupabase(currentPsId = null) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    // Get all active problem statements
+    const { data: activeStatements } = await supabase
+        .from('problem_statements')
+        .select('id')
+        .eq('is_active', 1);
+
+    if (!activeStatements || activeStatements.length === 0) return null;
+
+    // Get all checked-in teams with an assigned PS
+    const { data: checkedInTeams } = await supabase
+        .from('teams')
+        .select('problem_statement_id')
+        .eq('status', 'checked_in')
+        .not('problem_statement_id', 'is', null);
+
+    const counts = {};
+    activeStatements.forEach(ps => { counts[ps.id] = 0; });
+    (checkedInTeams || []).forEach(t => {
+        if (counts[t.problem_statement_id] !== undefined) {
+            counts[t.problem_statement_id]++;
+        }
+    });
+
+    let minCount = Infinity;
+    activeStatements.forEach(ps => {
+        if (counts[ps.id] < minCount) minCount = counts[ps.id];
+    });
+
+    let pool = activeStatements.filter(ps => counts[ps.id] === minCount);
+    if (pool.length > 1 && currentPsId) {
+        const filtered = pool.filter(ps => ps.id !== currentPsId);
+        if (filtered.length > 0) pool = filtered;
+    }
+
+    const chosen = pool[Math.floor(Math.random() * pool.length)] || activeStatements[0];
+    return chosen ? chosen.id : activeStatements[0].id;
+}
+
+// ==========================================
+// 5. ADMIN QUERIES
+// ==========================================
+
+async function getAdminByEmail(email) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from('admins')
+        .select('*')
+        .ilike('email', email.trim())
+        .limit(1);
+
+    return (data && data.length > 0) ? data[0] : null;
+}
+
+async function getAdminStats() {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const [
+        allTeamsRes,
+        allMembersRes,
+        allPsRes
+    ] = await Promise.all([
+        supabase.from('teams').select('*'),
+        supabase.from('team_members').select('*'),
+        supabase.from('problem_statements').select('*').eq('is_active', 1)
+    ]);
+
+    const teams = allTeamsRes.data || [];
+    const members = allMembersRes.data || [];
+    const problemStatements = allPsRes.data || [];
+
+    const totalTeams = teams.length;
+    const totalParticipants = members.length;
+    const approvedTeams = teams.filter(t => t.status === 'approved').length;
+    const pendingTeams = teams.filter(t => t.status === 'registered').length;
+    const rejectedTeams = teams.filter(t => t.status === 'rejected').length;
+    const checkedInTeams = teams.filter(t => t.status === 'checked_in').length;
+
+    // Dept stats
+    const deptMap = {};
+    members.forEach(m => {
+        const d = m.department || 'Unknown';
+        deptMap[d] = (deptMap[d] || 0) + 1;
+    });
+    const deptStats = Object.keys(deptMap).map(d => ({ department: d, count: deptMap[d] })).sort((a,b) => b.count - a.count);
+
+    // College stats
+    const collegeTeamMap = {};
+    const collegeMemberMap = {};
+    members.forEach(m => {
+        const c = m.college || 'Unknown';
+        collegeMemberMap[c] = (collegeMemberMap[c] || 0) + 1;
+        if (!collegeTeamMap[c]) collegeTeamMap[c] = new Set();
+        collegeTeamMap[c].add(m.team_id);
+    });
+    const collegeStats = Object.keys(collegeMemberMap).map(c => ({
+        college: c,
+        teams: collegeTeamMap[c] ? collegeTeamMap[c].size : 0,
+        members: collegeMemberMap[c]
+    })).sort((a,b) => b.teams - a.teams);
+
+    // Year stats
+    const yearMap = {};
+    members.forEach(m => {
+        const y = m.year || 'Unknown';
+        yearMap[y] = (yearMap[y] || 0) + 1;
+    });
+    const yearStats = Object.keys(yearMap).map(y => ({ year: y, count: yearMap[y] }));
+
+    // Status breakdown
+    const statusMap = {};
+    teams.forEach(t => {
+        statusMap[t.status] = (statusMap[t.status] || 0) + 1;
+    });
+    const statusBreakdown = Object.keys(statusMap).map(s => ({ status: s, count: statusMap[s] }));
+
+    // PS stats
+    const psCountMap = {};
+    teams.filter(t => t.status === 'checked_in').forEach(t => {
+        if (t.problem_statement_id) {
+            psCountMap[t.problem_statement_id] = (psCountMap[t.problem_statement_id] || 0) + 1;
+        }
+    });
+    const psStats = problemStatements.map(ps => ({
+        ps_number: ps.ps_number,
+        title: ps.title,
+        category: ps.category,
+        team_count: psCountMap[ps.id] || 0
+    })).sort((a,b) => b.team_count - a.team_count);
+
+    return {
+        totalTeams,
+        approvedTeams,
+        pendingTeams,
+        rejectedTeams,
+        checkedInTeams,
+        totalParticipants,
+        totalProblemStatements: problemStatements.length,
+        deptStats,
+        collegeStats,
+        yearStats,
+        psStats,
+        timeline: [],
+        statusBreakdown
+    };
+}
+
+async function getAdminTeams({ status, search } = {}) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    let query = supabase.from('teams').select('*').order('registered_at', { ascending: false });
+
+    if (status && status !== 'all') {
+        query = query.eq('status', status);
+    }
+    if (search) {
+        query = query.or(`team_name.ilike.%${search}%,team_lead_email.ilike.%${search}%,team_code.ilike.%${search}%`);
+    }
+
+    const { data: teams, error: teamsErr } = await query;
+    if (teamsErr) throw teamsErr;
+
+    // Fetch members and problem statements
+    const [membersRes, psRes] = await Promise.all([
+        supabase.from('team_members').select('*').order('is_leader', { ascending: false }).order('id', { ascending: true }),
+        supabase.from('problem_statements').select('id, ps_number, title, category')
+    ]);
+
+    const membersByTeam = {};
+    (membersRes.data || []).forEach(m => {
+        if (!membersByTeam[m.team_id]) membersByTeam[m.team_id] = [];
+        membersByTeam[m.team_id].push(m);
+    });
+
+    const psMap = {};
+    (psRes.data || []).forEach(ps => {
+        psMap[ps.id] = ps;
+    });
+
+    return (teams || []).map(t => {
+        const ps = t.problem_statement_id ? psMap[t.problem_statement_id] : null;
+        return {
+            ...t,
+            ps_number: ps ? ps.ps_number : null,
+            problem_statement_title: ps ? ps.title : null,
+            problem_statement_category: ps ? ps.category : null,
+            members: membersByTeam[t.id] || []
+        };
+    });
+}
+
+async function updateAdminTeamStatus(teamId, status) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data: team } = await supabase.from('teams').select('*').eq('id', teamId).single();
+    if (!team) return null;
+
+    let assignedPsId = team.problem_statement_id;
+    let checkedInAt = team.checked_in_at;
+
+    if (status === 'checked_in') {
+        if (!checkedInAt) checkedInAt = new Date().toISOString();
+        if (!assignedPsId) {
+            assignedPsId = await allocateShuffledProblemStatementInSupabase(null);
+        }
+    } else {
+        assignedPsId = null;
+        checkedInAt = null;
+    }
+
+    const { error } = await supabase.from('teams').update({
+        status,
+        problem_statement_id: assignedPsId,
+        checked_in_at: checkedInAt
+    }).eq('id', teamId);
+
+    if (error) throw error;
+
+    return {
+        status,
+        problem_statement_id: assignedPsId,
+        checked_in_at: checkedInAt
+    };
+}
+
+async function checkinAdminTeam(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data: team } = await supabase.from('teams').select('*').eq('id', teamId).single();
+    if (!team) return null;
+
+    const checkedInAt = new Date().toISOString();
+    let assignedPsId = team.problem_statement_id;
+    if (!assignedPsId) {
+        assignedPsId = await allocateShuffledProblemStatementInSupabase(null);
+    }
+
+    const { error } = await supabase.from('teams').update({
+        status: 'checked_in',
+        problem_statement_id: assignedPsId,
+        checked_in_at: checkedInAt
+    }).eq('id', teamId);
+
+    if (error) throw error;
+
+    return {
+        status: 'checked_in',
+        problem_statement_id: assignedPsId,
+        checked_in_at: checkedInAt
+    };
+}
+
+async function reallocateAdminTeam(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data: team } = await supabase.from('teams').select('*').eq('id', teamId).single();
+    if (!team) return null;
+
+    const newPsId = await allocateShuffledProblemStatementInSupabase(team.problem_statement_id);
+    const { error } = await supabase.from('teams').update({
+        problem_statement_id: newPsId
+    }).eq('id', teamId);
+
+    if (error) throw error;
+
+    const { data: ps } = await supabase.from('problem_statements').select('*').eq('id', newPsId).single();
+    return {
+        newPsId,
+        problemStatement: ps
+    };
+}
+
+async function deleteAdminTeam(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return false;
+
+    // Delete members first (in case foreign key cascade isn't configured in PG)
+    await supabase.from('team_members').delete().eq('team_id', teamId);
+    const { error } = await supabase.from('teams').delete().eq('id', teamId);
+    if (error) throw error;
+    return true;
+}
+
+module.exports = {
+    getProblemStatements,
+    getAnnouncements,
+    getSchedule,
+    getEventSettings,
+    getPublicStats,
+    checkRegistrationEligibility,
+    registerTeamInSupabase,
+    findTeamForLogin,
+    updateTeamPassword,
+    getTeamDashboardData,
+    updateTeamSubmission,
+    allocateShuffledProblemStatementInSupabase,
+    getAdminByEmail,
+    getAdminStats,
+    getAdminTeams,
+    updateAdminTeamStatus,
+    checkinAdminTeam,
+    reallocateAdminTeam,
+    deleteAdminTeam
+};
