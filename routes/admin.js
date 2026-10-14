@@ -702,6 +702,7 @@ const handleExportTeams = async (req, res) => {
 
 router.get('/export/teams', authenticateToken, handleExportTeams);
 router.get('/teams/export', authenticateToken, handleExportTeams);
+router.get('/export/csv', authenticateToken, handleExportTeams);
 
 // Admin File Upload to Supabase Storage (Materials, Schedule PDF, Guidelines)
 router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {

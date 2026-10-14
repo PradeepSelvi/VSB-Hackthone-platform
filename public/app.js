@@ -361,7 +361,10 @@ async function loadPublicData() {
 
         // Render sections safely
         if (schedule) renderSchedule(schedule);
-        if (ps) renderProblems(ps);
+        if (ps) {
+            renderProblems(ps);
+            renderProblemTicker(ps);
+        }
         if (announcements) renderAnnouncements(announcements);
         if (ps) populateProblemSelect(ps);
         if (settings) updateSettings(settings);
@@ -426,6 +429,60 @@ function renderSchedule(schedule) {
             </div>
         `;
     }).join('');
+}
+
+// ====== Problem Statements Running Marquee Ticker ======
+function renderProblemTicker(problems) {
+    const tracks = [
+        document.getElementById('psTickerContent'),
+        document.getElementById('psTickerContentProblems')
+    ].filter(Boolean);
+
+    if (!tracks.length) return;
+    if (!problems || !problems.length) {
+        tracks.forEach(track => {
+            track.innerHTML = `
+                <span class="ps-ticker-item">📌 Problem Statements will be announced shortly! Stay tuned!</span>
+            `;
+        });
+        return;
+    }
+
+    const itemsHtml = problems.map((p) => {
+        const psNum = p.ps_number != null ? `PS #${String(p.ps_number).padStart(2, '0')}` : `PS-${String(p.id).padStart(2, '0')}`;
+        const cat = p.category ? `<span class="ps-ticker-cat">${escapeHtml(p.category)}</span>` : '';
+        const desc = p.description ? escapeHtml(p.description.trim()) : '';
+        return `
+            <div class="ps-ticker-item" onclick="handleTickerPSClick(${p.id})" title="Click to view full details for ${escapeHtml(p.title)}">
+                <span class="ps-ticker-pin">📌</span>
+                <span class="ps-ticker-num">${psNum}</span>
+                <span class="ps-ticker-title">${escapeHtml(p.title)}:</span>
+                <span class="ps-ticker-desc">${desc}</span>
+                ${cat}
+                <span class="ps-ticker-sep">•</span>
+            </div>
+        `;
+    }).join('');
+
+    const totalItems = problems.length * 2;
+    const scrollSec = Math.max(90, Math.round(totalItems * 6.5));
+
+    tracks.forEach(track => {
+        // Duplicate content twice to create a seamless infinite loop
+        track.innerHTML = itemsHtml + itemsHtml;
+        track.style.animationDuration = `${scrollSec}s`;
+    });
+}
+
+function handleTickerPSClick(id) {
+    if (typeof switchPage === 'function') {
+        switchPage('problems');
+    }
+    setTimeout(() => {
+        if (typeof openPSDetail === 'function') {
+            openPSDetail(id);
+        }
+    }, 280);
 }
 
 // ====== Render Problems ======
@@ -1118,8 +1175,9 @@ async function loadTeamDashboard() {
         const res = await fetch(`${API_BASE}/team/dashboard`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
             localStorage.removeItem('synapse_team_token');
+            localStorage.removeItem('synapse_team_info');
             return renderTeamLoginForm();
         }
         const data = await res.json();
