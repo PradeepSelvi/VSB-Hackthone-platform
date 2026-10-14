@@ -7,6 +7,43 @@ let token = localStorage.getItem('synapse_admin_token');
 let adminInfo = JSON.parse(localStorage.getItem('synapse_admin_info') || '{}');
 let allTeams = [];
 
+// ====== Security Sanitization (XSS Prevention) ======
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function safeUrl(url) {
+    if (!url || typeof url !== 'string') return '#';
+    const trimmed = url.trim();
+    if (/^(https?:\/\/|\/)/i.test(trimmed)) {
+        return escapeHtml(trimmed);
+    }
+    return '#';
+}
+
+function toDateTimeLocalValue(dt) {
+    if (!dt) return '';
+    try {
+        const d = new Date(typeof dt === 'string' && dt.includes(' ') && !dt.includes('T') ? dt.replace(' ', 'T') : dt);
+        if (isNaN(d.getTime())) return '';
+        const pad = (n) => String(n).padStart(2, '0');
+        const year = d.getFullYear();
+        const month = pad(d.getMonth() + 1);
+        const day = pad(d.getDate());
+        const hours = pad(d.getHours());
+        const minutes = pad(d.getMinutes());
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+        return '';
+    }
+}
+
 // ====== Initialize ======
 document.addEventListener('DOMContentLoaded', () => {
     if (token) {
@@ -164,7 +201,7 @@ function renderDeptChart(data) {
             ${data.slice(0, 8).map((d, i) => `
                 <div class="bar-item">
                     <div class="bar" style="height: ${(d.count / max) * 100}%; background: ${colors[i % colors.length]};" data-value="${d.count}"></div>
-                    <span class="bar-label">${d.department.split(' ')[0]}</span>
+                    <span class="bar-label">${escapeHtml(d.department.split(' ')[0])}</span>
                 </div>
             `).join('')}
         </div>
@@ -230,7 +267,7 @@ function renderYearChart(data) {
             ${data.map((d, i) => `
                 <div class="bar-item">
                     <div class="bar" style="height: ${(d.count / max) * 100}%; background: ${colors[i % colors.length]};" data-value="${d.count}"></div>
-                    <span class="bar-label">${d.year}</span>
+                    <span class="bar-label">${escapeHtml(d.year)}</span>
                 </div>
             `).join('')}
         </div>
@@ -252,7 +289,7 @@ function renderPSChart(data) {
             ${data.map((d, i) => `
                 <div class="bar-item">
                     <div class="bar" style="height: ${(d.team_count / max) * 100}%; background: ${colors[i % colors.length]};" data-value="${d.team_count}"></div>
-                    <span class="bar-label" title="${d.title}">${d.title.substring(0, 12)}${d.title.length > 12 ? '…' : ''}</span>
+                    <span class="bar-label" title="${escapeHtml(d.title)}">${escapeHtml(d.title.substring(0, 12))}${d.title.length > 12 ? '…' : ''}</span>
                 </div>
             `).join('')}
         </div>
@@ -267,9 +304,9 @@ function renderCollegeTable(data) {
     }
     tbody.innerHTML = data.map(d => `
         <tr>
-            <td>${d.college}</td>
-            <td>${d.teams}</td>
-            <td>${d.members}</td>
+            <td>${escapeHtml(d.college)}</td>
+            <td>${escapeHtml(d.teams)}</td>
+            <td>${escapeHtml(d.members)}</td>
         </tr>
     `).join('');
 }
@@ -306,10 +343,10 @@ function renderTeams(teams) {
             <div class="team-card-header">
                 <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
                     <span class="badge" style="background: rgba(0, 206, 201, 0.15); color: var(--accent-cyan); font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid rgba(0, 206, 201, 0.3);">
-                        <i class="fas fa-id-badge"></i> ${teamCode}
+                        <i class="fas fa-id-badge"></i> ${escapeHtml(teamCode)}
                     </span>
-                    <h4 style="margin: 0;">${team.team_name}</h4>
-                    <span class="status-badge status-${team.status}">${team.status.replace('_', ' ')}</span>
+                    <h4 style="margin: 0;">${escapeHtml(team.team_name)}</h4>
+                    <span class="status-badge status-${escapeHtml(team.status)}">${escapeHtml(team.status.replace('_', ' '))}</span>
                 </div>
                 <div class="team-actions">
                     ${team.status !== 'checked_in' ? `
@@ -329,28 +366,28 @@ function renderTeams(teams) {
                 </div>
             </div>
             <div class="team-meta">
-                <span><i class="fas fa-envelope"></i> ${team.team_lead_email}</span>
-                <span><i class="fas fa-users"></i> ${team.team_size} members</span>
-                <span><i class="fas fa-calendar"></i> Reg: ${new Date(team.registered_at).toLocaleDateString()}</span>
+                <span><i class="fas fa-envelope"></i> ${escapeHtml(team.team_lead_email)}</span>
+                <span><i class="fas fa-users"></i> ${escapeHtml(team.team_size)} members</span>
+                <span><i class="fas fa-calendar"></i> Reg: ${formatDateTime(team.registered_at)}</span>
                 ${team.checked_in_at ? `<span style="color: var(--accent-green);"><i class="fas fa-check-double"></i> Checked in: ${formatDateTime(team.checked_in_at)}</span>` : '<span style="color: var(--accent-orange);"><i class="fas fa-hourglass-half"></i> Not checked in</span>'}
                 ${team.problem_statement_title ? `
-                    <span style="color: var(--accent-cyan); font-weight: 600;"><i class="fas fa-clipboard-check"></i> PS: ${team.problem_statement_title}</span>
+                    <span style="color: var(--accent-cyan); font-weight: 600;"><i class="fas fa-clipboard-check"></i> PS: ${escapeHtml(team.problem_statement_title)}</span>
                 ` : `
                     <span style="color: var(--text-muted);"><i class="fas fa-question-circle"></i> PS: Awaiting Check-in</span>
                 `}
-                ${team.project_repo ? `<span><a href="${team.project_repo}" target="_blank" style="color: var(--accent-secondary);"><i class="fab fa-github"></i> Repo</a></span>` : ''}
-                ${team.project_demo ? `<span><a href="${team.project_demo}" target="_blank" style="color: var(--accent-cyan);"><i class="fas fa-globe"></i> Demo</a></span>` : ''}
-                ${team.submission_file_url ? `<span><a href="${team.submission_file_url}" target="_blank" style="color: #a29bfe; background: rgba(108,92,231,0.2); padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108,92,231,0.3); text-decoration: none;"><i class="fas fa-cloud-download-alt"></i> Stored File</a></span>` : ''}
+                ${team.project_repo ? `<span><a href="${safeUrl(team.project_repo)}" target="_blank" rel="noopener noreferrer" style="color: var(--accent-secondary);"><i class="fab fa-github"></i> Repo</a></span>` : ''}
+                ${team.project_demo ? `<span><a href="${safeUrl(team.project_demo)}" target="_blank" rel="noopener noreferrer" style="color: var(--accent-cyan);"><i class="fas fa-globe"></i> Demo</a></span>` : ''}
+                ${team.submission_file_url ? `<span><a href="${safeUrl(team.submission_file_url)}" target="_blank" rel="noopener noreferrer" style="color: #a29bfe; background: rgba(108,92,231,0.2); padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108,92,231,0.3); text-decoration: none;"><i class="fas fa-cloud-download-alt"></i> Stored File</a></span>` : ''}
             </div>
             <div class="members-grid">
                 ${(team.members || []).map(m => `
                     <div class="member-pill">
-                        <div class="member-avatar">${m.name.charAt(0).toUpperCase()}</div>
+                        <div class="member-avatar">${escapeHtml((m.name || '?').charAt(0).toUpperCase())}</div>
                         <div class="member-info">
-                            <span class="name">${m.name} ${m.is_leader ? '👑' : ''}</span>
-                            <span class="detail">${m.department} | ${m.year}</span>
-                            <span class="detail">${m.email} | ${m.phone}</span>
-                            <span class="detail">${m.college}</span>
+                            <span class="name">${escapeHtml(m.name)} ${m.is_leader ? '👑' : ''}</span>
+                            <span class="detail">${escapeHtml(m.department)} | ${escapeHtml(m.year)}</span>
+                            <span class="detail">${escapeHtml(m.email)} | ${escapeHtml(m.phone)}</span>
+                            <span class="detail">${escapeHtml(m.college)}</span>
                         </div>
                     </div>
                 `).join('')}
@@ -369,7 +406,7 @@ async function checkInTeam(id) {
             showToast(`Assigned PS: ${data.problem_statement.title}`, 'info');
         }
         loadTeams();
-        loadDashboardStats();
+        loadDashboard();
     } catch (err) {
         showToast('Failed to check in team', 'error');
     }
@@ -382,7 +419,7 @@ async function shuffleTeamPS(id) {
         const data = await res.json();
         showToast(data.message || 'Problem statement assigned!', 'success');
         loadTeams();
-        loadDashboardStats();
+        loadDashboard();
     } catch (err) {
         showToast('Failed to shuffle problem statement', 'error');
     }
@@ -394,7 +431,7 @@ async function updateTeamStatus(id, status) {
         const data = await res.json();
         showToast(`Team status updated!`, 'success');
         loadTeams();
-        loadDashboardStats();
+        loadDashboard();
     } catch (err) {
         showToast('Failed to update status', 'error');
     }
@@ -406,7 +443,7 @@ async function deleteTeam(id) {
         await apiCall(`${API_BASE}/teams/${id}`, 'DELETE');
         showToast('Team deleted', 'success');
         loadTeams();
-        loadDashboardStats();
+        loadDashboard();
     } catch (err) {
         showToast('Failed to delete team', 'error');
     }
@@ -433,16 +470,16 @@ function renderPSList(items) {
     container.innerHTML = items.map(item => `
         <div class="item-card" style="opacity: ${item.is_active ? '1' : '0.5'}">
             <div class="item-card-header">
-                <h4>${item.title}</h4>
+                <h4>${escapeHtml(item.title)}</h4>
                 <div style="display:flex; gap:0.5rem;">
                     <button class="btn btn-outline btn-sm" onclick="editPS(${item.id})"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-outline btn-sm" onclick="deletePS(${item.id})" style="color:var(--accent-red)"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            <p>${item.description}</p>
+            <p>${escapeHtml(item.description)}</p>
             <div class="item-meta">
-                <span class="tag">${item.category}</span>
-                <span class="tag" style="background:rgba(${item.difficulty === 'easy' ? '85,239,196' : item.difficulty === 'medium' ? '253,203,110' : '255,107,107'},0.15); color:${item.difficulty === 'easy' ? 'var(--accent-green)' : item.difficulty === 'medium' ? 'var(--accent-orange)' : 'var(--accent-red)'};">${item.difficulty}</span>
+                <span class="tag">${escapeHtml(item.category)}</span>
+                <span class="tag" style="background:rgba(${item.difficulty === 'easy' ? '85,239,196' : item.difficulty === 'medium' ? '253,203,110' : '255,107,107'},0.15); color:${item.difficulty === 'easy' ? 'var(--accent-green)' : item.difficulty === 'medium' ? 'var(--accent-orange)' : 'var(--accent-red)'};">${escapeHtml(item.difficulty)}</span>
                 <span>${item.is_active ? '✅ Active' : '❌ Inactive'}</span>
             </div>
         </div>
@@ -456,23 +493,23 @@ function showPSModal(editData = null) {
         <form id="psForm" onsubmit="submitPS(event, ${editData ? editData.id : 'null'})">
             <div class="form-group">
                 <label>Title</label>
-                <input type="text" id="psTitle" value="${editData?.title || ''}" required>
+                <input type="text" id="psTitle" value="${escapeHtml(editData?.title || '')}" required>
             </div>
             <div class="form-group">
                 <label>Description</label>
-                <textarea id="psDescription" rows="4" required style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${editData?.description || ''}</textarea>
+                <textarea id="psDescription" rows="4" required style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${escapeHtml(editData?.description || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Problem Faced (Challenges)</label>
-                <textarea id="psProblemFaced" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Challenges faced in existing systems...">${editData?.problem_faced || ''}</textarea>
+                <textarea id="psProblemFaced" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Challenges faced in existing systems...">${escapeHtml(editData?.problem_faced || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Suggested Solution & Architecture</label>
-                <textarea id="psSuggestedSolution" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Recommended system architecture, models, or solutions...">${editData?.suggested_solution || ''}</textarea>
+                <textarea id="psSuggestedSolution" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;" placeholder="Recommended system architecture, models, or solutions...">${escapeHtml(editData?.suggested_solution || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Category</label>
-                <input type="text" id="psCategory" value="${editData?.category || ''}" required placeholder="e.g., AI/ML, Healthcare, Education">
+                <input type="text" id="psCategory" value="${escapeHtml(editData?.category || '')}" required placeholder="e.g., AI/ML, Healthcare, Education">
             </div>
             <div class="form-group">
                 <label>Difficulty</label>
@@ -571,19 +608,19 @@ function renderAnnouncementsList(items) {
     const priorityColors = { low: '#55efc4', normal: '#6c5ce7', high: '#fdcb6e', urgent: '#ff6b6b' };
 
     container.innerHTML = items.map(item => `
-        <div class="item-card" style="opacity: ${item.is_active ? '1' : '0.5'}; border-left: 3px solid ${priorityColors[item.priority]};">
+        <div class="item-card" style="opacity: ${item.is_active ? '1' : '0.5'}; border-left: 3px solid ${priorityColors[item.priority] || '#6c5ce7'};">
             <div class="item-card-header">
-                <h4>${item.title}</h4>
+                <h4>${escapeHtml(item.title)}</h4>
                 <div style="display:flex; gap:0.5rem;">
                     <button class="btn btn-outline btn-sm" onclick="editAnnouncement(${item.id})"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-outline btn-sm" onclick="deleteAnnouncement(${item.id})" style="color:var(--accent-red)"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            <p>${item.message}</p>
+            <p>${escapeHtml(item.message)}</p>
             <div class="item-meta">
-                <span class="tag" style="background:rgba(${item.priority === 'urgent' ? '255,107,107' : item.priority === 'high' ? '253,203,110' : item.priority === 'low' ? '85,239,196' : '108,92,231'},0.15);">${item.priority}</span>
+                <span class="tag" style="background:rgba(${item.priority === 'urgent' ? '255,107,107' : item.priority === 'high' ? '253,203,110' : item.priority === 'low' ? '85,239,196' : '108,92,231'},0.15);">${escapeHtml(item.priority)}</span>
                 <span>${item.is_active ? '✅ Active' : '❌ Inactive'}</span>
-                <span>${new Date(item.created_at).toLocaleString()}</span>
+                <span>${formatDateTime(item.created_at)}</span>
             </div>
         </div>
     `).join('');
@@ -596,11 +633,11 @@ function showAnnouncementModal(editData = null) {
         <form id="announcementForm" onsubmit="submitAnnouncement(event, ${editData ? editData.id : 'null'})">
             <div class="form-group">
                 <label>Title</label>
-                <input type="text" id="annTitle" value="${editData?.title || ''}" required>
+                <input type="text" id="annTitle" value="${escapeHtml(editData?.title || '')}" required>
             </div>
             <div class="form-group">
                 <label>Message</label>
-                <textarea id="annMessage" rows="4" required style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${editData?.message || ''}</textarea>
+                <textarea id="annMessage" rows="4" required style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${escapeHtml(editData?.message || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Priority</label>
@@ -699,17 +736,17 @@ function renderScheduleList(items) {
     container.innerHTML = items.map(item => `
         <div class="item-card" style="opacity: ${item.is_active ? '1' : '0.5'}; border-left: 3px solid ${typeColors[item.event_type] || '#6c5ce7'};">
             <div class="item-card-header">
-                <h4>${item.title}</h4>
+                <h4>${escapeHtml(item.title)}</h4>
                 <div style="display:flex; gap:0.5rem;">
                     <button class="btn btn-outline btn-sm" onclick="editSchedule(${item.id})"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-outline btn-sm" onclick="deleteSchedule(${item.id})" style="color:var(--accent-red)"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            <p>${item.description || ''}</p>
+            <p>${escapeHtml(item.description || '')}</p>
             <div class="item-meta">
-                <span class="tag">${item.event_type}</span>
+                <span class="tag">${escapeHtml(item.event_type)}</span>
                 <span><i class="fas fa-clock"></i> ${formatDateTime(item.start_time)}${item.end_time ? ' - ' + formatDateTime(item.end_time) : ''}</span>
-                ${item.location ? `<span><i class="fas fa-map-marker-alt"></i> ${item.location}</span>` : ''}
+                ${item.location ? `<span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(item.location)}</span>` : ''}
                 <span>${item.is_active ? '✅ Active' : '❌ Inactive'}</span>
             </div>
         </div>
@@ -723,23 +760,23 @@ function showScheduleModal(editData = null) {
         <form id="scheduleForm" onsubmit="submitSchedule(event, ${editData ? editData.id : 'null'})">
             <div class="form-group">
                 <label>Event Title</label>
-                <input type="text" id="schTitle" value="${editData?.title || ''}" required>
+                <input type="text" id="schTitle" value="${escapeHtml(editData?.title || '')}" required>
             </div>
             <div class="form-group">
                 <label>Description</label>
-                <textarea id="schDescription" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${editData?.description || ''}</textarea>
+                <textarea id="schDescription" rows="3" style="width:100%;padding:0.75rem;background:rgba(10,10,20,0.6);border:1px solid var(--glass-border);border-radius:10px;color:var(--text-primary);font-family:var(--font-body);font-size:0.9rem;outline:none;resize:vertical;">${escapeHtml(editData?.description || '')}</textarea>
             </div>
             <div class="form-group">
                 <label>Start Time</label>
-                <input type="datetime-local" id="schStartTime" value="${editData?.start_time ? editData.start_time.replace(' ', 'T') : ''}" required>
+                <input type="datetime-local" id="schStartTime" value="${toDateTimeLocalValue(editData?.start_time)}" required>
             </div>
             <div class="form-group">
                 <label>End Time</label>
-                <input type="datetime-local" id="schEndTime" value="${editData?.end_time ? editData.end_time.replace(' ', 'T') : ''}">
+                <input type="datetime-local" id="schEndTime" value="${toDateTimeLocalValue(editData?.end_time)}">
             </div>
             <div class="form-group">
                 <label>Location</label>
-                <input type="text" id="schLocation" value="${editData?.location || ''}">
+                <input type="text" id="schLocation" value="${escapeHtml(editData?.location || '')}">
             </div>
             <div class="form-group">
                 <label>Event Type</label>
@@ -907,13 +944,16 @@ document.addEventListener('keydown', (e) => {
 
 // ====== Utilities ======
 function formatDateTime(dt) {
+    if (!dt) return '';
     try {
-        return new Date(dt.replace(' ', 'T')).toLocaleString('en-US', {
+        const d = new Date(typeof dt === 'string' && dt.includes(' ') && !dt.includes('T') ? dt.replace(' ', 'T') : dt);
+        if (isNaN(d.getTime())) return escapeHtml(String(dt));
+        return d.toLocaleString('en-US', {
             month: 'short', day: 'numeric',
             hour: '2-digit', minute: '2-digit', hour12: true
         });
     } catch {
-        return dt;
+        return escapeHtml(String(dt || ''));
     }
 }
 
@@ -927,7 +967,7 @@ function showToast(message, type = 'info') {
 
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.innerHTML = `<i class="${icons[type] || icons.info}"></i><span>${message}</span>`;
+    toast.innerHTML = `<i class="${icons[type] || icons.info}"></i><span>${escapeHtml(message)}</span>`;
     container.appendChild(toast);
 
     setTimeout(() => {

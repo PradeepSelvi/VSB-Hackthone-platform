@@ -11,9 +11,14 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const corsOptions = {
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -27,9 +32,18 @@ app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Serve main site for all other routes (Express 5 compatible catch-all)
+// JSON 404 handler for API routes (prevents HTML catch-all hijacking)
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Serve main frontend for non-API GET routes
 app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    if (req.method === 'GET') {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    } else {
+        res.status(404).json({ error: 'Not found' });
+    }
 });
 
 // Initialize database and start server

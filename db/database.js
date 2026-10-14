@@ -18,6 +18,7 @@ function getDb() {
         db = new Database(DB_PATH);
         db.pragma('journal_mode = WAL');
         db.pragma('foreign_keys = ON');
+        db.pragma('busy_timeout = 5000');
     }
     return db;
 }
@@ -28,7 +29,7 @@ function parseProblemStatementsFromMarkdown() {
     if (!fs.existsSync(psFile)) return [];
 
     const content = fs.readFileSync(psFile, 'utf-8');
-    const regex = /#\s*(\d+)\\\.\s*([^\r\n]+)([\s\S]*?)(?=(?:#\s*\d+\\\.)|$)/g;
+    const regex = /#\s*(\d+)(?:\\\.|[\.\-])\s*([^\r\n]+)([\s\S]*?)(?=(?:#\s*\d+(?:\\\.|[\.\-]))|$)/g;
     let match;
     const statements = [];
 
@@ -238,11 +239,11 @@ function initializeDatabase() {
         }
     }
 
-    // Seed real Problem Statements from vsb_hackathon_ps.md (removing old mock problem statements)
+    // Seed real Problem Statements from vsb_hackathon_ps.md (only on initial setup or if legacy mock statements exist)
     const mockCheck = db.prepare("SELECT COUNT(*) as count FROM problem_statements WHERE title = 'Smart Campus Navigation'").get();
     const psCount = db.prepare('SELECT COUNT(*) as count FROM problem_statements').get().count;
 
-    if (mockCheck.count > 0 || psCount < 20) {
+    if (mockCheck.count > 0 || psCount === 0) {
         console.log('🔄 Loading official VSB Hackathon problem statements from vsb_hackathon_ps.md...');
         const parsedPS = parseProblemStatementsFromMarkdown();
 

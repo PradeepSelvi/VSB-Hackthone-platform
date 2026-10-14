@@ -10,6 +10,9 @@ function authenticateToken(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key');
+        if (decoded.role !== 'admin') {
+            return res.status(403).json({ error: 'Access forbidden: Administrator privileges required.' });
+        }
         req.admin = decoded;
         next();
     } catch (err) {
@@ -27,7 +30,7 @@ function authenticateTeamToken(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key');
-        if (decoded.role !== 'team' && !decoded.teamId) {
+        if (decoded.role !== 'team' || !decoded.teamId) {
             return res.status(403).json({ error: 'Invalid team authorization.' });
         }
         req.team = decoded;

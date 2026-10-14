@@ -20,7 +20,7 @@ function allocateShuffledProblemStatement(db, currentPsId) {
     const activeStatements = db.prepare(`
         SELECT ps.id, COUNT(t.id) as team_count
         FROM problem_statements ps
-        LEFT JOIN teams t ON t.problem_statement_id = ps.id
+        LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
         WHERE ps.is_active = 1
         GROUP BY ps.id
         ORDER BY team_count ASC
@@ -55,7 +55,7 @@ router.post('/login', (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: admin.id, email: admin.email, name: admin.name },
+            { id: admin.id, email: admin.email, name: admin.name, role: 'admin' },
             process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
             { expiresIn: '24h' }
         );
@@ -106,7 +106,7 @@ router.get('/stats', authenticateToken, (req, res) => {
         const psStats = db.prepare(`
             SELECT ps.ps_number, ps.title, ps.category, COUNT(t.id) as team_count
             FROM problem_statements ps
-            LEFT JOIN teams t ON t.problem_statement_id = ps.id
+            LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
             WHERE ps.is_active = 1
             GROUP BY ps.id
             ORDER BY team_count DESC, ps.ps_number ASC
@@ -211,6 +211,10 @@ router.patch('/teams/:id/status', authenticateToken, (req, res) => {
             if (!assignedPsId) {
                 assignedPsId = allocateShuffledProblemStatement(db, null);
             }
+        } else {
+            // Un-checking in resets checkin timestamp and deallocates the problem statement
+            assignedPsId = null;
+            checkedInAt = null;
         }
 
         db.prepare('UPDATE teams SET status = ?, problem_statement_id = ?, checked_in_at = ? WHERE id = ?')
@@ -270,9 +274,16 @@ router.post('/teams/:id/shuffle-ps', authenticateToken, (req, res) => {
         let newPsId;
 
         if (problem_statement_id) {
-            newPsId = parseInt(problem_statement_id);
+            newPsId = parseInt(problem_statement_id, 10);
+            const exists = db.prepare('SELECT id FROM problem_statements WHERE id = ? AND is_active = 1').get(newPsId);
+            if (!exists) {
+                return res.status(400).json({ error: 'Selected problem statement is invalid or inactive.' });
+            }
         } else {
             newPsId = allocateShuffledProblemStatement(db, team.problem_statement_id);
+            if (!newPsId) {
+                return res.status(400).json({ error: 'No active problem statements available to assign.' });
+            }
         }
 
         db.prepare('UPDATE teams SET problem_statement_id = ? WHERE id = ?').run(newPsId, req.params.id);
@@ -496,12 +507,65 @@ router.get('/export/teams', authenticateToken, (req, res) => {
             ORDER BY t.id, tm.is_leader DESC
         `).all();
 
+        function csvEscape(val) {
+            if (val === null || val === undefined) return '""';
+            let str = String(val).replace(/[\r\n]+/g, ' ');
+            // Prevent formula injection in spreadsheet software
+            if (/^[=+\-@\t\r]/.test(str)) {
+                str = "'" + str;
+            }
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+
         // CSV header
         let csv = 'Team ID,Team Name,Team Lead Email,Team Size,Status,Problem Statement Number,Problem Statement,Category,Registered At,Checked In At,Project Repo,Project Demo,Submission File URL,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
 
-        members.forEach(m => {
-            const team = teams.find(t => t.id === m.team_id);
-            csv += `"${team.team_code || ''}","${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.ps_number || ''}","${team.problem_statement || 'Pending Check-in'}","${team.ps_category || ''}","${team.registered_at || ''}","${team.checked_in_at || ''}","${team.project_repo || ''}","${team.project_demo || ''}","${team.submission_file_url || ''}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
+        teams.forEach(team => {
+            const teamMembers = members.filter(m => m.team_id === team.id);
+            if (teamMembers.length === 0) {
+                // Team with no members
+                csv += [
+                    csvEscape(team.team_code || ''),
+                    csvEscape(team.team_name),
+                    csvEscape(team.team_lead_email),
+                    team.team_size || 0,
+                    csvEscape(team.status),
+                    csvEscape(team.ps_number || ''),
+                    csvEscape(team.problem_statement || 'Pending Check-in'),
+                    csvEscape(team.ps_category || ''),
+                    csvEscape(team.registered_at || ''),
+                    csvEscape(team.checked_in_at || ''),
+                    csvEscape(team.project_repo || ''),
+                    csvEscape(team.project_demo || ''),
+                    csvEscape(team.submission_file_url || ''),
+                    '""', '""', '""', '""', '""', '""', '""'
+                ].join(',') + '\n';
+            } else {
+                teamMembers.forEach(m => {
+                    csv += [
+                        csvEscape(team.team_code || ''),
+                        csvEscape(team.team_name),
+                        csvEscape(team.team_lead_email),
+                        team.team_size || 0,
+                        csvEscape(team.status),
+                        csvEscape(team.ps_number || ''),
+                        csvEscape(team.problem_statement || 'Pending Check-in'),
+                        csvEscape(team.ps_category || ''),
+                        csvEscape(team.registered_at || ''),
+                        csvEscape(team.checked_in_at || ''),
+                        csvEscape(team.project_repo || ''),
+                        csvEscape(team.project_demo || ''),
+                        csvEscape(team.submission_file_url || ''),
+                        csvEscape(m.name),
+                        csvEscape(m.email),
+                        csvEscape(m.phone),
+                        csvEscape(m.year),
+                        csvEscape(m.department),
+                        csvEscape(m.college),
+                        m.is_leader ? '"Yes"' : '"No"'
+                    ].join(',') + '\n';
+                });
+            }
         });
 
         res.setHeader('Content-Type', 'text/csv');

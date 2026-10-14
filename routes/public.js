@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -104,18 +105,49 @@ router.post('/register', async (req, res) => {
 
         const { team_name, problem_statement_id, members } = req.body;
 
-        if (!team_name || !members || !Array.isArray(members)) {
-            return res.status(400).json({ error: 'Team name and members are required.' });
+        // Server-side validation
+        if (!team_name || typeof team_name !== 'string' || team_name.trim().length < 2 || team_name.trim().length > 50) {
+            return res.status(400).json({ error: 'Team name is required and must be between 2 and 50 characters.' });
         }
 
-        if (members.length < 2 || members.length > 4) {
-            return res.status(400).json({ error: 'Team must have 2-4 members.' });
+        if (!members || !Array.isArray(members) || members.length < 2 || members.length > 4) {
+            return res.status(400).json({ error: 'Team must have between 2 and 4 members.' });
         }
 
-        // Validate all members
-        for (const m of members) {
-            if (!m.name || !m.email || !m.phone || !m.year || !m.department || !m.college) {
-                return res.status(400).json({ error: 'All member fields are required.' });
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const phoneRegex = /^\+?[\d\s\-]{10,15}$/;
+
+        // Validate each member
+        for (let i = 0; i < members.length; i++) {
+            const m = members[i];
+            if (!m || typeof m !== 'object') {
+                return res.status(400).json({ error: `Member ${i + 1} data is invalid.` });
+            }
+            if (!m.name || typeof m.name !== 'string' || m.name.trim().length < 2 || m.name.trim().length > 60) {
+                return res.status(400).json({ error: `Member ${i + 1}: Name must be between 2 and 60 characters.` });
+            }
+            if (!m.email || typeof m.email !== 'string' || m.email.trim().length > 100 || !emailRegex.test(m.email.trim())) {
+                return res.status(400).json({ error: `Member ${i + 1}: A valid email address is required (max 100 characters).` });
+            }
+            if (!m.phone || typeof m.phone !== 'string' || !phoneRegex.test(m.phone.trim())) {
+                return res.status(400).json({ error: `Member ${i + 1}: A valid 10-15 digit phone number is required.` });
+            }
+            if (!m.year || typeof m.year !== 'string' || m.year.trim().length > 20) {
+                return res.status(400).json({ error: `Member ${i + 1}: Year of study is required.` });
+            }
+            if (!m.department || typeof m.department !== 'string' || m.department.trim().length > 100) {
+                return res.status(400).json({ error: `Member ${i + 1}: Department is required (max 100 characters).` });
+            }
+            if (!m.college || typeof m.college !== 'string' || m.college.trim().length > 150) {
+                return res.status(400).json({ error: `Member ${i + 1}: College name is required (max 150 characters).` });
+            }
+        }
+
+        // Validate problem statement if chosen
+        if (problem_statement_id) {
+            const psCheck = db.prepare('SELECT id FROM problem_statements WHERE id = ? AND is_active = 1').get(problem_statement_id);
+            if (!psCheck) {
+                return res.status(400).json({ error: 'Selected problem statement is invalid or inactive.' });
             }
         }
 
@@ -123,7 +155,7 @@ router.post('/register', async (req, res) => {
         const emails = members.map(m => m.email.trim().toLowerCase());
         const uniqueEmails = [...new Set(emails)];
         if (uniqueEmails.length !== emails.length) {
-            return res.status(400).json({ error: 'Duplicate email addresses in team members.' });
+            return res.status(400).json({ error: 'Duplicate email addresses in team members list.' });
         }
 
         // Check if any member email is already registered in DB
@@ -140,47 +172,54 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Team name already taken. Please choose a different name.' });
         }
 
-        // Generate sequential Team Code like SYN001, SYN002, etc.
-        const maxIdRow = db.prepare('SELECT MAX(id) as maxId FROM teams').get();
-        const nextNum = (maxIdRow && maxIdRow.maxId ? maxIdRow.maxId : 0) + 1;
-        const teamCode = 'SYN' + String(nextNum).padStart(3, '0');
-        const defaultPassword = 'Syanp2K26';
-
-        // Find the leader (first member is leader by default)
+        // Leader designation (first member by default if none explicitly marked)
         const leader = members.find(m => m.is_leader) || members[0];
+        const defaultPassword = 'Syanp2K26';
+        const hashedPassword = bcrypt.hashSync(defaultPassword, 10);
 
-        // Insert team with team_code and default password
         const insertTeam = db.prepare(`
             INSERT INTO teams (team_code, team_name, team_lead_email, team_size, password, problem_statement_id, status)
             VALUES (?, ?, ?, ?, ?, ?, 'registered')
         `);
-        const teamResult = insertTeam.run(
-            teamCode,
-            team_name.trim(),
-            leader.email.trim(),
-            members.length,
-            defaultPassword,
-            problem_statement_id || null
-        );
-        const teamId = teamResult.lastInsertRowid;
 
-        // Insert members
         const insertMember = db.prepare(`
             INSERT INTO team_members (team_id, name, email, phone, year, department, college, is_leader)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        for (const m of members) {
-            insertMember.run(
-                teamId,
-                m.name.trim(),
-                m.email.trim(),
-                m.phone.trim(),
-                m.year.trim(),
-                m.department.trim(),
-                m.college.trim(),
-                m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+
+        // Transactional execution to guarantee atomicity and race-free team code assignment
+        const registerTransaction = db.transaction(() => {
+            const maxIdRow = db.prepare('SELECT MAX(id) as maxId FROM teams').get();
+            const nextNum = (maxIdRow && maxIdRow.maxId ? maxIdRow.maxId : 0) + 1;
+            const code = 'SYN' + String(nextNum).padStart(3, '0');
+
+            const teamResult = insertTeam.run(
+                code,
+                team_name.trim(),
+                leader.email.trim(),
+                members.length,
+                hashedPassword,
+                problem_statement_id || null
             );
-        }
+            const teamId = teamResult.lastInsertRowid;
+
+            for (const m of members) {
+                insertMember.run(
+                    teamId,
+                    m.name.trim(),
+                    m.email.trim(),
+                    m.phone.trim(),
+                    m.year.trim(),
+                    m.department.trim(),
+                    m.college.trim(),
+                    m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+                );
+            }
+
+            return { teamId, teamCode: code };
+        });
+
+        const { teamId, teamCode } = registerTransaction();
 
         // Sync with Supabase if configured
         if (isSupabaseConfigured()) {
@@ -192,7 +231,7 @@ router.post('/register', async (req, res) => {
                         team_name: team_name.trim(),
                         team_lead_email: leader.email.trim(),
                         team_size: members.length,
-                        password: defaultPassword,
+                        password: hashedPassword,
                         problem_statement_id: problem_statement_id || null,
                         status: 'registered'
                     }).select().single();
@@ -245,10 +284,22 @@ router.post('/team/login', (req, res) => {
             return res.status(401).json({ error: 'Team ID not found. Please verify your SYN ID.' });
         }
 
-        // Validate password (common password "Syanp2K26", with case flexibility)
-        const validPassword = team.password || 'Syanp2K26';
-        if (password !== validPassword && password.toLowerCase() !== validPassword.toLowerCase()) {
-            return res.status(401).json({ error: 'Invalid password. Common team password is Syanp2K26.' });
+        // Secure password comparison: bcrypt hash with fallback and auto-upgrade
+        let isValidPassword = false;
+        if (team.password && team.password.startsWith('$2')) {
+            isValidPassword = bcrypt.compareSync(password, team.password);
+        } else {
+            // Legacy plaintext fallback (exact comparison)
+            isValidPassword = (team.password === password || password === 'Syanp2K26');
+            if (isValidPassword) {
+                // Automatically upgrade to bcrypt hash
+                const upgradedHash = bcrypt.hashSync(password, 10);
+                db.prepare('UPDATE teams SET password = ? WHERE id = ?').run(upgradedHash, team.id);
+            }
+        }
+
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
         }
 
         const token = jwt.sign(
@@ -292,7 +343,7 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
                 const activePS = db.prepare(`
                     SELECT ps.id, COUNT(t.id) as team_count
                     FROM problem_statements ps
-                    LEFT JOIN teams t ON t.problem_statement_id = ps.id
+                    LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
                     WHERE ps.is_active = 1
                     GROUP BY ps.id
                     ORDER BY team_count ASC
@@ -426,14 +477,44 @@ router.post('/team/upload', authenticateTeamToken, upload.single('file'), async 
 // ====== Team Project Submission ======
 router.post('/team/submit', authenticateTeamToken, async (req, res) => {
     try {
-        const { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
+        let { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
+        
+        // Enforce length caps (Issue #21)
+        if (project_repo && typeof project_repo === 'string') {
+            project_repo = project_repo.trim();
+            if (project_repo.length > 300) return res.status(400).json({ error: 'Repository link is too long (max 300 chars).' });
+        } else {
+            project_repo = null;
+        }
+
+        if (project_demo && typeof project_demo === 'string') {
+            project_demo = project_demo.trim();
+            if (project_demo.length > 300) return res.status(400).json({ error: 'Demo link is too long (max 300 chars).' });
+        } else {
+            project_demo = null;
+        }
+
+        if (submission_notes && typeof submission_notes === 'string') {
+            submission_notes = submission_notes.trim();
+            if (submission_notes.length > 2000) return res.status(400).json({ error: 'Submission notes are too long (max 2000 chars).' });
+        } else {
+            submission_notes = null;
+        }
+
+        if (submission_file_url && typeof submission_file_url === 'string') {
+            submission_file_url = submission_file_url.trim();
+            if (submission_file_url.length > 500) return res.status(400).json({ error: 'File URL is too long.' });
+        } else {
+            submission_file_url = null;
+        }
+
         const db = getDb();
 
         db.prepare(`
             UPDATE teams 
             SET project_repo = ?, project_demo = ?, submission_notes = ?, submission_file_url = COALESCE(?, submission_file_url)
             WHERE id = ?
-        `).run(project_repo || null, project_demo || null, submission_notes || null, submission_file_url || null, req.team.teamId);
+        `).run(project_repo, project_demo, submission_notes, submission_file_url, req.team.teamId);
 
         // Sync with Supabase if configured
         if (isSupabaseConfigured()) {
