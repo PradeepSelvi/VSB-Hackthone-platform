@@ -347,6 +347,12 @@ body {
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .nav-cta:hover {
