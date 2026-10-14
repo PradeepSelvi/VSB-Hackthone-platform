@@ -276,22 +276,40 @@ function renderYearChart(data) {
 
 function renderPSChart(data) {
     const container = document.getElementById('psChart');
-    if (!data.length) {
-        container.innerHTML = '<p style="color: var(--text-muted); text-align:center;">No data yet</p>';
+    if (!data || !data.length) {
+        container.innerHTML = '<p style="color: var(--text-muted); text-align:center; padding: 2rem 0;">No problem statement data</p>';
         return;
     }
 
-    const max = Math.max(...data.map(d => d.team_count), 1);
-    const colors = ['#6c5ce7', '#00cec9', '#fd79a8', '#fdcb6e', '#55efc4', '#a29bfe'];
+    // Sort: highest team count first, then by ps_number
+    const sorted = [...data].sort((a, b) => (b.team_count || 0) - (a.team_count || 0) || (a.ps_number || 0) - (b.ps_number || 0));
+    const max = Math.max(...sorted.map(d => d.team_count || 0), 1);
+    const colors = ['#6c5ce7', '#00cec9', '#fd79a8', '#fdcb6e', '#55efc4', '#a29bfe', '#74b9ff', '#ff7675'];
 
     container.innerHTML = `
-        <div class="bar-chart">
-            ${data.map((d, i) => `
-                <div class="bar-item">
-                    <div class="bar" style="height: ${(d.team_count / max) * 100}%; background: ${colors[i % colors.length]};" data-value="${d.team_count}"></div>
-                    <span class="bar-label" title="${escapeHtml(d.title)}">${escapeHtml(d.title.substring(0, 12))}${d.title.length > 12 ? '…' : ''}</span>
-                </div>
-            `).join('')}
+        <div class="ps-rank-container">
+            ${sorted.map((d, i) => {
+                const count = d.team_count || 0;
+                const pct = count > 0 ? Math.round((count / max) * 100) : 0;
+                const barColor = colors[i % colors.length];
+                const psNum = d.ps_number != null ? `PS #${String(d.ps_number).padStart(2, '0')}` : `#${i + 1}`;
+                const cat = d.category ? `<span class="ps-rank-cat">${escapeHtml(d.category)}</span>` : '';
+                return `
+                    <div class="ps-rank-item">
+                        <div class="ps-rank-header">
+                            <div class="ps-rank-meta">
+                                <span class="ps-rank-badge">${psNum}</span>
+                                <span class="ps-rank-title" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</span>
+                                ${cat}
+                            </div>
+                            <span class="ps-rank-count">${count} ${count === 1 ? 'team' : 'teams'}</span>
+                        </div>
+                        <div class="ps-rank-track">
+                            <div class="ps-rank-bar" style="width: ${count > 0 ? Math.max(pct, 6) : 0}%; background: ${barColor};"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
 }
