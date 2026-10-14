@@ -519,6 +519,73 @@ router.get('/team/dashboard', authenticateTeamToken, async (req, res) => {
     }
 });
 
+// ====== Reveal / Roll Random Problem Statement ======
+router.post('/team/reveal-ps', authenticateTeamToken, async (req, res) => {
+    try {
+        const teamId = req.team.teamId;
+
+        // 1. Supabase-first
+        if (isSupabaseConfigured()) {
+            try {
+                const result = await supabaseData.revealTeamProblemStatement(teamId);
+                if (result) {
+                    // Mirror status & check-in to local SQLite
+                    try {
+                        const db = getDb();
+                        db.prepare("UPDATE teams SET status = 'checked_in', checked_in_at = COALESCE(checked_in_at, datetime('now')) WHERE id = ?").run(teamId);
+                    } catch (e) {}
+
+                    return res.json({
+                        success: true,
+                        isCheckedIn: true,
+                        problem_statement: result.problemStatement,
+                        team: result.team
+                    });
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase reveal-ps notice:', supaErr.message);
+            }
+        }
+
+        // 2. SQLite Fallback
+        const db = getDb();
+        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
+        if (!team) {
+            return res.status(404).json({ error: 'Team not found.' });
+        }
+
+        let psId = team.problem_statement_id;
+        if (!psId) {
+            const activePS = db.prepare('SELECT id FROM problem_statements WHERE is_active = 1').all();
+            if (activePS.length > 0) {
+                psId = activePS[Math.floor(Math.random() * activePS.length)].id;
+            }
+        }
+
+        const now = new Date().toISOString();
+        const checkedInTime = team.checked_in_at || now;
+        db.prepare("UPDATE teams SET status = 'checked_in', checked_in_at = ?, problem_statement_id = ? WHERE id = ?")
+            .run(checkedInTime, psId, teamId);
+
+        const ps = psId ? db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(psId) : null;
+
+        return res.json({
+            success: true,
+            isCheckedIn: true,
+            problem_statement: ps,
+            team: {
+                ...team,
+                status: 'checked_in',
+                checked_in_at: checkedInTime,
+                problem_statement_id: psId
+            }
+        });
+    } catch (err) {
+        console.error('Error revealing problem statement:', err);
+        res.status(500).json({ error: 'Server error revealing problem statement.' });
+    }
+});
+
 // ====== Team File Upload (Supabase Storage with local fallback) ======
 router.post('/team/upload', authenticateTeamToken, upload.single('file'), async (req, res) => {
     try {

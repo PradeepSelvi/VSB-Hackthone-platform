@@ -1273,16 +1273,34 @@ function renderTeamDashboard(data) {
                 </div>
             </div>
         ` : `
-            <div class="ps-locked-card">
-                <div class="ps-locked-icon">
-                    <i class="fas fa-lock"></i>
+            <div class="ps-locked-card" id="psRandomizerCard" style="background: radial-gradient(circle at 50% 20%, rgba(108,92,231,0.22) 0%, rgba(20,20,35,0.85) 75%); border: 1px solid rgba(108,92,231,0.4); box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 30px rgba(108,92,231,0.2); border-radius: var(--border-radius); padding: 2rem 1.5rem; text-align: center; position: relative; overflow: hidden;">
+                <div class="ps-locked-icon" id="psDiceIcon" style="font-size: 3.2rem; color: #fdcb6e; filter: drop-shadow(0 0 18px rgba(253, 203, 110, 0.6)); margin-bottom: 0.8rem; display: inline-block; transition: all 0.4s ease;">
+                    <i class="fas fa-dice-d20"></i>
                 </div>
-                <h4 style="font-family: var(--font-display); color: var(--accent-orange); margin-bottom: 0.5rem;">
-                    Problem Statement Locked
+                <h4 style="font-family: var(--font-display); color: #fff; font-size: 1.35rem; margin-bottom: 0.5rem; letter-spacing: 0.5px;">
+                    Allocate Your Hackathon Challenge
                 </h4>
-                <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 1.25rem; font-size: 0.95rem; line-height: 1.6;">
-                    Your problem statement is queued. It will be <strong>shuffled and unlocked automatically with your 24-hour timer</strong> as soon as the Admin marks your team as Checked In at the venue desk!
+                <p style="color: var(--text-secondary); max-width: 580px; margin: 0 auto 1.3rem; font-size: 0.95rem; line-height: 1.6;">
+                    Ready to build? Click the button below to <strong>randomly draw and unlock</strong> your team's Problem Statement and begin your official <strong>24-hour hackathon timer</strong>!
                 </p>
+
+                <!-- Dynamic rolling ticker display during shuffle -->
+                <div id="rollingTickerBox" style="display: none; background: rgba(10,10,20,0.85); border: 1px solid rgba(0,206,201,0.5); border-radius: 10px; padding: 1.1rem 1.5rem; margin-bottom: 1.35rem; max-width: 540px; margin-left: auto; margin-right: auto; box-shadow: 0 0 30px rgba(0,206,201,0.25);">
+                    <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.8px; color: var(--accent-cyan); margin-bottom: 0.4rem; font-family: var(--font-mono); display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                        <i class="fas fa-sync fa-spin"></i> Randomizing Challenge Pool...
+                    </div>
+                    <div id="rollingTickerTitle" style="font-size: 1.15rem; font-weight: 700; color: #fff; font-family: var(--font-display); min-height: 1.7rem; text-shadow: 0 0 12px rgba(0,206,201,0.8);">
+                        Scanning Challenge Pool...
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.6rem;">
+                    <button id="rollPsBtn" class="btn btn-primary" onclick="rollRandomProblemStatement()" 
+                            style="padding: 0.9rem 2.2rem; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.5px; border-radius: 30px; background: linear-gradient(135deg, #6c5ce7 0%, #00cec9 100%); box-shadow: 0 0 30px rgba(108,92,231,0.55); cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); border: none;">
+                        <i class="fas fa-dice"></i> Click to Get Random Problem Statement
+                    </button>
+                </div>
+
                 <div style="display: flex; flex-direction: column; gap: 0.4rem; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.08); padding: 0.9rem 1.25rem; border-radius: 8px; font-size: 0.88rem; color: var(--text-secondary); max-width: 560px; margin: 0 auto; text-align: left;">
                     <div><i class="fas fa-university" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Event:</strong> ${escapeHtml(data.settings?.event_name || 'SYNAPSE')} - ${escapeHtml(data.settings?.event_tagline || '24-Hour Hackathon')}</div>
                     <div><i class="fas fa-microchip" style="color: var(--accent-secondary); width: 20px;"></i> <strong>Dept:</strong> ${escapeHtml(data.settings?.event_department || 'Department of AI & Data Science')}</div>
@@ -1382,6 +1400,99 @@ function renderTeamDashboard(data) {
     // Start live countdown timer if checked in
     if (data.isCheckedIn && team.checked_in_at) {
         startCountdownTimer(team.checked_in_at);
+    }
+}
+
+async function rollRandomProblemStatement() {
+    const btn = document.getElementById('rollPsBtn');
+    const tickerBox = document.getElementById('rollingTickerBox');
+    const tickerTitle = document.getElementById('rollingTickerTitle');
+    const diceIcon = document.getElementById('psDiceIcon');
+
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Randomizing Challenge...';
+    btn.style.opacity = '0.75';
+
+    if (tickerBox) tickerBox.style.display = 'block';
+    if (diceIcon) {
+        diceIcon.innerHTML = '<i class="fas fa-dice fa-spin"></i>';
+        diceIcon.style.color = 'var(--accent-cyan)';
+    }
+
+    // Dynamic pool of challenge titles to rapidly shuffle through
+    const poolTitles = [
+        "PS #01: Lending & Credit Assessment",
+        "PS #02: Real-Time Fraud Detection & Alerting",
+        "PS #03: Personalised Banking AI Copilot",
+        "PS #04: Open Banking & API Governance",
+        "PS #06: Underwriting Automation Engine",
+        "PS #08: Usage-Based Telematics Insurance",
+        "PS #10: Catastrophe Risk Modelling",
+        "PS #13: Healthcare System Interoperability",
+        "PS #16: Decentralized AI Agent Orchestrator",
+        "PS #17: Real-Time Indian Sign Language Translator",
+        "PS #18: Enterprise Legal Intelligence & Contract Risk",
+        "PS #19: Enterprise Multi-Source RAG Intelligence",
+        "PS #21: Early-Warning Community Outbreak Engine",
+        "PS #23: Agent Hijack Shield Defense Platform",
+        "PS #24: Digital Evidence Integrity & Fraud Platform"
+    ];
+
+    let tickerIndex = 0;
+    const tickerInterval = setInterval(() => {
+        if (tickerTitle) {
+            tickerTitle.textContent = poolTitles[tickerIndex % poolTitles.length];
+            tickerIndex++;
+        }
+    }, 70);
+
+    try {
+        const token = localStorage.getItem('synapse_team_token');
+        const res = await fetch('/api/team/reveal-ps', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+            throw new Error(result.error || 'Failed to reveal problem statement');
+        }
+
+        // Wait ~2.2 seconds for realistic randomizing slot-machine suspense
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        clearInterval(tickerInterval);
+
+        const landedPs = result.problem_statement;
+        if (tickerTitle && landedPs) {
+            tickerTitle.innerHTML = `<span style="color: #55efc4; text-shadow: 0 0 15px rgba(85,239,196,0.8);"><i class="fas fa-check-circle"></i> PS #${landedPs.ps_number || landedPs.id}: ${escapeHtml(landedPs.title)}</span>`;
+        }
+
+        // Brief 650ms moment to celebrate match
+        await new Promise(resolve => setTimeout(resolve, 650));
+
+        showToast(`🎉 Challenge Drawn: ${landedPs ? landedPs.title : 'Problem Statement Unlocked!'}`, 'success');
+
+        // Re-open dashboard with freshly unlocked PS and running 24h timer
+        await openTeamDashboard();
+
+    } catch (err) {
+        clearInterval(tickerInterval);
+        console.error('Error rolling problem statement:', err);
+        showToast(err.message || 'Error unlocking problem statement', 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-dice"></i> Click to Get Random Problem Statement';
+            btn.style.opacity = '1';
+        }
+        if (tickerBox) tickerBox.style.display = 'none';
+        if (diceIcon) {
+            diceIcon.innerHTML = '<i class="fas fa-dice-d20"></i>';
+            diceIcon.style.color = '#fdcb6e';
+        }
     }
 }
 

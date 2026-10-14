@@ -373,6 +373,53 @@ async function updateTeamSubmission(teamId, { project_repo, project_demo, submis
     return true;
 }
 
+async function revealTeamProblemStatement(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    const { data: team, error } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+
+    if (error || !team) return null;
+
+    let psId = team.problem_statement_id;
+    if (!psId) {
+        psId = await allocateShuffledProblemStatementInSupabase();
+    }
+
+    const now = new Date().toISOString();
+    const checkedInAt = team.checked_in_at || now;
+
+    await supabase
+        .from('teams')
+        .update({
+            status: 'checked_in',
+            checked_in_at: checkedInAt,
+            problem_statement_id: psId
+        })
+        .eq('id', teamId);
+
+    const { data: ps } = await supabase
+        .from('problem_statements')
+        .select('*')
+        .eq('id', psId)
+        .single();
+
+    return {
+        team: {
+            ...team,
+            status: 'checked_in',
+            checked_in_at: checkedInAt,
+            problem_statement_id: psId
+        },
+        problemStatement: ps,
+        isCheckedIn: true
+    };
+}
+
 // ==========================================
 // 4. ALLOCATION ALGORITHM IN SUPABASE
 // ==========================================
@@ -681,6 +728,7 @@ module.exports = {
     findTeamForLogin,
     updateTeamPassword,
     getTeamDashboardData,
+    revealTeamProblemStatement,
     updateTeamSubmission,
     allocateShuffledProblemStatementInSupabase,
     getAdminByEmail,
