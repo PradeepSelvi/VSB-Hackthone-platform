@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate:supabase": "node scripts/migrate_to_supabase.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node scripts/audit_test.js",
+    "test:audit": "node scripts/audit_test.js"
   },
   "keywords": [],
   "author": "",

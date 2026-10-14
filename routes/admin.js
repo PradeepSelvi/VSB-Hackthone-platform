@@ -191,7 +191,7 @@ router.get('/teams', authenticateToken, (req, res) => {
 });
 
 // Update team status (with automatic problem statement shuffle on check-in)
-router.patch('/teams/:id/status', authenticateToken, (req, res) => {
+const handleTeamStatusUpdate = (req, res) => {
     try {
         const { status } = req.body;
         if (!['registered', 'approved', 'rejected', 'checked_in'].includes(status)) {
@@ -230,7 +230,10 @@ router.patch('/teams/:id/status', authenticateToken, (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
-});
+};
+
+router.patch('/teams/:id/status', authenticateToken, handleTeamStatusUpdate);
+router.put('/teams/:id/status', authenticateToken, handleTeamStatusUpdate);
 
 // Single-click Check-in for team (with shuffle & timestamp)
 router.post('/teams/:id/checkin', authenticateToken, (req, res) => {
@@ -488,7 +491,7 @@ router.put('/settings', authenticateToken, (req, res) => {
 });
 
 // Export teams as CSV
-router.get('/export/teams', authenticateToken, (req, res) => {
+const handleExportTeams = (req, res) => {
     try {
         const db = getDb();
         const teams = db.prepare(`
@@ -575,7 +578,10 @@ router.get('/export/teams', authenticateToken, (req, res) => {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
     }
-});
+};
+
+router.get('/export/teams', authenticateToken, handleExportTeams);
+router.get('/teams/export', authenticateToken, handleExportTeams);
 
 // Admin File Upload to Supabase Storage (Materials, Schedule PDF, Guidelines)
 router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {

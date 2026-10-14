@@ -49,8 +49,12 @@ app.use((req, res) => {
 // Initialize database and start server
 initializeDatabase();
 
-app.listen(PORT, () => {
-    console.log(`\n🚀 SYNAPSE Hackathon Server running at http://localhost:${PORT}`);
-    console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
-    console.log(`🔐 Default Admin: ${process.env.ADMIN_EMAIL || 'admin@synapse.com'} / ${process.env.ADMIN_PASSWORD || 'synapse2026'}\n`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`\n🚀 SYNAPSE Hackathon Server running at http://localhost:${PORT}`);
+        console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
+        console.log(`🔐 Default Admin: ${process.env.ADMIN_EMAIL || 'admin@synapse.com'} / ${process.env.ADMIN_PASSWORD || 'synapse2026'}\n`);
+    });
+}
+
+module.exports = app;

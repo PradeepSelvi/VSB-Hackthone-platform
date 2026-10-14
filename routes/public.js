@@ -271,17 +271,21 @@ router.post('/register', async (req, res) => {
 // ====== Team Leader Login ======
 router.post('/team/login', (req, res) => {
     try {
-        const { team_code, password } = req.body;
-        if (!team_code || !password) {
-            return res.status(400).json({ error: 'Team ID (e.g., SYN001) and password are required.' });
+        const identifier = (req.body.team_code || req.body.login_identifier || req.body.email || '').trim();
+        const password = req.body.password;
+
+        if (!identifier || !password) {
+            return res.status(400).json({ error: 'Team ID (e.g., SYN001) or Team Lead Email and password are required.' });
         }
 
         const db = getDb();
-        const codeClean = team_code.trim().toUpperCase();
-        const team = db.prepare('SELECT * FROM teams WHERE UPPER(team_code) = ?').get(codeClean);
+        const upperIdentifier = identifier.toUpperCase();
+        const lowerIdentifier = identifier.toLowerCase();
+        const team = db.prepare('SELECT * FROM teams WHERE UPPER(team_code) = ? OR LOWER(team_name) = ? OR LOWER(team_lead_email) = ?')
+            .get(upperIdentifier, lowerIdentifier, lowerIdentifier);
 
         if (!team) {
-            return res.status(401).json({ error: 'Team ID not found. Please verify your SYN ID.' });
+            return res.status(401).json({ error: 'Team not found. Please verify your Team ID or Lead Email.' });
         }
 
         // Secure password comparison: bcrypt hash with fallback and auto-upgrade

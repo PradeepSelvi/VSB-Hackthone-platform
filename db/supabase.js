@@ -130,6 +130,7 @@ async function listSupabaseFiles(prefix = 'submissions', bucket = DEFAULT_BUCKET
 module.exports = {
     isSupabaseConfigured,
     getSupabase,
+    getSupabaseClient: getSupabase,
     uploadToSupabaseStorage,
     deleteFromSupabaseStorage,
     listSupabaseFiles,
