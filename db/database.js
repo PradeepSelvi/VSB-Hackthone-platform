@@ -128,6 +128,7 @@ function initializeDatabase() {
             project_repo TEXT,
             project_demo TEXT,
             submission_notes TEXT,
+            submission_file_url TEXT,
             FOREIGN KEY (problem_statement_id) REFERENCES problem_statements(id)
         );
 
@@ -183,6 +184,7 @@ function initializeDatabase() {
         `ALTER TABLE teams ADD COLUMN project_repo TEXT;`,
         `ALTER TABLE teams ADD COLUMN project_demo TEXT;`,
         `ALTER TABLE teams ADD COLUMN submission_notes TEXT;`,
+        `ALTER TABLE teams ADD COLUMN submission_file_url TEXT;`,
         `ALTER TABLE problem_statements ADD COLUMN ps_number INTEGER;`,
         `ALTER TABLE problem_statements ADD COLUMN problem_faced TEXT;`,
         `ALTER TABLE problem_statements ADD COLUMN suggested_solution TEXT;`

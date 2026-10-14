@@ -1,9 +1,19 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { getDb } = require('../db/database');
 const { authenticateTeamToken } = require('../middleware/auth');
+const { isSupabaseConfigured, getSupabase, uploadToSupabaseStorage } = require('../db/supabase');
 
 const router = express.Router();
+
+// Multer upload config (50MB memory storage for cloud/local pipe)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 // Get active problem statements (public)
 router.get('/problem-statements', (req, res) => {
@@ -75,7 +85,7 @@ router.get('/stats', (req, res) => {
 });
 
 // Register a team (public)
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
     try {
         const db = getDb();
 
@@ -170,6 +180,40 @@ router.post('/register', (req, res) => {
                 m.college.trim(),
                 m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
             );
+        }
+
+        // Sync with Supabase if configured
+        if (isSupabaseConfigured()) {
+            try {
+                const supabase = getSupabase();
+                if (supabase) {
+                    const { data: supaTeam, error: teamErr } = await supabase.from('teams').insert({
+                        team_code: teamCode,
+                        team_name: team_name.trim(),
+                        team_lead_email: leader.email.trim(),
+                        team_size: members.length,
+                        password: defaultPassword,
+                        problem_statement_id: problem_statement_id || null,
+                        status: 'registered'
+                    }).select().single();
+
+                    if (!teamErr && supaTeam && supaTeam.id) {
+                        const supaMembers = members.map(m => ({
+                            team_id: supaTeam.id,
+                            name: m.name.trim(),
+                            email: m.email.trim(),
+                            phone: m.phone.trim(),
+                            year: m.year.trim(),
+                            department: m.department.trim(),
+                            college: m.college.trim(),
+                            is_leader: m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
+                        }));
+                        await supabase.from('team_members').insert(supaMembers);
+                    }
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase registration sync skipped/error:', supaErr.message);
+            }
         }
 
         res.status(201).json({
@@ -292,7 +336,8 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
                 checked_in_at: team.checked_in_at,
                 project_repo: team.project_repo,
                 project_demo: team.project_demo,
-                submission_notes: team.submission_notes
+                submission_notes: team.submission_notes,
+                submission_file_url: team.submission_file_url
             },
             members,
             problem_statement: problemStatement,
@@ -311,23 +356,119 @@ router.get('/team/dashboard', authenticateTeamToken, (req, res) => {
     }
 });
 
-// ====== Team Project Submission ======
-router.post('/team/submit', authenticateTeamToken, (req, res) => {
+// ====== Team File Upload (Supabase Storage with local fallback) ======
+router.post('/team/upload', authenticateTeamToken, upload.single('file'), async (req, res) => {
     try {
-        const { project_repo, project_demo, submission_notes } = req.body;
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file received. Please choose a file (PDF, PPT, ZIP, max 50MB).' });
+        }
+
+        const originalName = req.file.originalname;
+        const mimeType = req.file.mimetype || 'application/octet-stream';
+        const buffer = req.file.buffer;
+        let fileUrl = '';
+        let storageProvider = 'local';
+
+        // 1. Try uploading to Supabase Storage if configured
+        if (isSupabaseConfigured()) {
+            try {
+                const uploadResult = await uploadToSupabaseStorage(buffer, originalName, mimeType);
+                if (uploadResult && uploadResult.publicUrl) {
+                    fileUrl = uploadResult.publicUrl;
+                    storageProvider = 'supabase';
+                }
+            } catch (supaErr) {
+                console.error('⚠️ Supabase storage upload failed, falling back to local storage:', supaErr.message);
+            }
+        }
+
+        // 2. Local fallback if Supabase not configured or encountered error
+        if (!fileUrl) {
+            const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            const safeName = `${Date.now()}_${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            const targetPath = path.join(uploadDir, safeName);
+            fs.writeFileSync(targetPath, buffer);
+            fileUrl = `/uploads/${safeName}`;
+            storageProvider = 'local';
+        }
+
+        // Update database for the team
+        const db = getDb();
+        db.prepare('UPDATE teams SET submission_file_url = ? WHERE id = ?').run(fileUrl, req.team.teamId);
+
+        // Sync to Supabase DB if configured
+        if (isSupabaseConfigured()) {
+            try {
+                const supabase = getSupabase();
+                if (supabase) {
+                    await supabase.from('teams').update({ submission_file_url: fileUrl }).eq('id', req.team.teamId);
+                }
+            } catch (supaSyncErr) {
+                console.warn('⚠️ Supabase DB update failed for upload:', supaSyncErr.message);
+            }
+        }
+
+        res.json({
+            message: `File successfully uploaded to ${storageProvider === 'supabase' ? 'Supabase Storage' : 'local storage'}!`,
+            fileUrl,
+            fileName: originalName,
+            storage: storageProvider
+        });
+    } catch (err) {
+        console.error('Upload Error:', err);
+        res.status(500).json({ error: 'Failed to process file upload: ' + (err.message || 'Unknown error') });
+    }
+});
+
+// ====== Team Project Submission ======
+router.post('/team/submit', authenticateTeamToken, async (req, res) => {
+    try {
+        const { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
         const db = getDb();
 
         db.prepare(`
             UPDATE teams 
-            SET project_repo = ?, project_demo = ?, submission_notes = ?
+            SET project_repo = ?, project_demo = ?, submission_notes = ?, submission_file_url = COALESCE(?, submission_file_url)
             WHERE id = ?
-        `).run(project_repo || null, project_demo || null, submission_notes || null, req.team.teamId);
+        `).run(project_repo || null, project_demo || null, submission_notes || null, submission_file_url || null, req.team.teamId);
+
+        // Sync with Supabase if configured
+        if (isSupabaseConfigured()) {
+            try {
+                const supabase = getSupabase();
+                if (supabase) {
+                    const updatePayload = {
+                        project_repo: project_repo || null,
+                        project_demo: project_demo || null,
+                        submission_notes: submission_notes || null
+                    };
+                    if (submission_file_url) {
+                        updatePayload.submission_file_url = submission_file_url;
+                    }
+                    await supabase.from('teams').update(updatePayload).eq('id', req.team.teamId);
+                }
+            } catch (supaErr) {
+                console.warn('⚠️ Supabase submit sync error:', supaErr.message);
+            }
+        }
 
         res.json({ message: 'Project submission updated successfully!' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Server error saving submission.' });
     }
+});
+
+// ====== Storage Status (Supabase status check) ======
+router.get('/storage/status', (req, res) => {
+    res.json({
+        supabaseConfigured: isSupabaseConfigured(),
+        storageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'hackathon-files',
+        maxUploadSizeMB: 50
+    });
 });
 
 module.exports = router;

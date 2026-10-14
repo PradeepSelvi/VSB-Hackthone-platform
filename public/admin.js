@@ -339,6 +339,8 @@ function renderTeams(teams) {
                     <span style="color: var(--text-muted);"><i class="fas fa-question-circle"></i> PS: Awaiting Check-in</span>
                 `}
                 ${team.project_repo ? `<span><a href="${team.project_repo}" target="_blank" style="color: var(--accent-secondary);"><i class="fab fa-github"></i> Repo</a></span>` : ''}
+                ${team.project_demo ? `<span><a href="${team.project_demo}" target="_blank" style="color: var(--accent-cyan);"><i class="fas fa-globe"></i> Demo</a></span>` : ''}
+                ${team.submission_file_url ? `<span><a href="${team.submission_file_url}" target="_blank" style="color: #a29bfe; background: rgba(108,92,231,0.2); padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108,92,231,0.3); text-decoration: none;"><i class="fas fa-cloud-download-alt"></i> Stored File</a></span>` : ''}
             </div>
             <div class="members-grid">
                 ${(team.members || []).map(m => `

@@ -1,10 +1,19 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 const { getDb } = require('../db/database');
 const { authenticateToken } = require('../middleware/auth');
+const { isSupabaseConfigured, getSupabase, uploadToSupabaseStorage, listSupabaseFiles, deleteFromSupabaseStorage } = require('../db/supabase');
 
 const router = express.Router();
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 // Helper to fairly shuffle and allocate problem statement to a team
 function allocateShuffledProblemStatement(db, currentPsId) {
@@ -473,7 +482,7 @@ router.get('/export/teams', authenticateToken, (req, res) => {
         const db = getDb();
         const teams = db.prepare(`
             SELECT t.id, t.team_code, t.team_name, t.team_lead_email, t.team_size, t.status, 
-                   t.registered_at, t.checked_in_at, t.project_repo, t.project_demo,
+                   t.registered_at, t.checked_in_at, t.project_repo, t.project_demo, t.submission_file_url,
                    ps.ps_number, ps.title as problem_statement, ps.category as ps_category
             FROM teams t
             LEFT JOIN problem_statements ps ON t.problem_statement_id = ps.id
@@ -488,11 +497,11 @@ router.get('/export/teams', authenticateToken, (req, res) => {
         `).all();
 
         // CSV header
-        let csv = 'Team ID,Team Name,Team Lead Email,Team Size,Status,Problem Statement Number,Problem Statement,Category,Registered At,Checked In At,Project Repo,Project Demo,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
+        let csv = 'Team ID,Team Name,Team Lead Email,Team Size,Status,Problem Statement Number,Problem Statement,Category,Registered At,Checked In At,Project Repo,Project Demo,Submission File URL,Member Name,Member Email,Member Phone,Member Year,Member Department,Member College,Is Leader\n';
 
         members.forEach(m => {
             const team = teams.find(t => t.id === m.team_id);
-            csv += `"${team.team_code || ''}","${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.ps_number || ''}","${team.problem_statement || 'Pending Check-in'}","${team.ps_category || ''}","${team.registered_at || ''}","${team.checked_in_at || ''}","${team.project_repo || ''}","${team.project_demo || ''}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
+            csv += `"${team.team_code || ''}","${team.team_name}","${team.team_lead_email}",${team.team_size},"${team.status}","${team.ps_number || ''}","${team.problem_statement || 'Pending Check-in'}","${team.ps_category || ''}","${team.registered_at || ''}","${team.checked_in_at || ''}","${team.project_repo || ''}","${team.project_demo || ''}","${team.submission_file_url || ''}","${m.name}","${m.email}","${m.phone}","${m.year}","${m.department}","${m.college}",${m.is_leader}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
@@ -501,6 +510,67 @@ router.get('/export/teams', authenticateToken, (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Admin File Upload to Supabase Storage (Materials, Schedule PDF, Guidelines)
+router.post('/upload', authenticateToken, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded.' });
+        }
+
+        const originalName = req.file.originalname;
+        const mimeType = req.file.mimetype || 'application/octet-stream';
+        const buffer = req.file.buffer;
+        let fileUrl = '';
+        let storage = 'local';
+
+        if (isSupabaseConfigured()) {
+            try {
+                const result = await uploadToSupabaseStorage(buffer, originalName, mimeType);
+                if (result && result.publicUrl) {
+                    fileUrl = result.publicUrl;
+                    storage = 'supabase';
+                }
+            } catch (err) {
+                console.warn('⚠️ Supabase admin upload fallback:', err.message);
+            }
+        }
+
+        if (!fileUrl) {
+            const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            const safeName = `${Date.now()}_${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+            fs.writeFileSync(path.join(uploadDir, safeName), buffer);
+            fileUrl = `/uploads/${safeName}`;
+            storage = 'local';
+        }
+
+        res.json({
+            message: `File uploaded successfully (${storage})!`,
+            fileUrl,
+            fileName: originalName,
+            storage
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error during upload.' });
+    }
+});
+
+// Admin list Supabase storage files
+router.get('/storage/files', authenticateToken, async (req, res) => {
+    try {
+        if (!isSupabaseConfigured()) {
+            return res.json({ configured: false, files: [] });
+        }
+        const files = await listSupabaseFiles('submissions');
+        res.json({ configured: true, files });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list storage files' });
     }
 });
 
