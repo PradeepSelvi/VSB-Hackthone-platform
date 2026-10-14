@@ -154,9 +154,20 @@ async function generateExcel() {
     xlsx.utils.book_append_sheet(wb, wsAll, 'Teams & Problem Statements');
     xlsx.utils.book_append_sheet(wb, wsPairs, 'Paired Allocations');
 
-    xlsx.writeFile(wb, OUTPUT_EXCEL);
+    let writtenPath = OUTPUT_EXCEL;
+    try {
+        xlsx.writeFile(wb, OUTPUT_EXCEL);
+    } catch (writeErr) {
+        if (writeErr.code === 'EBUSY') {
+            writtenPath = path.join(__dirname, '..', 'Synapse_Teams_Problem_Statements_Updated.xlsx');
+            xlsx.writeFile(wb, writtenPath);
+            console.log(`⚠️ Original file was open in Excel. Saved updated workbook to: ${writtenPath}`);
+        } else {
+            throw writeErr;
+        }
+    }
 
-    console.log(`\n🎉 Excel file successfully generated: ${OUTPUT_EXCEL}`);
+    console.log(`\n🎉 Excel file successfully generated: ${writtenPath}`);
     console.log(`📋 Total Teams exported: ${allTeamsRows.length}`);
     console.log(`👥 Total Pairs exported: ${pairedAllocations.length}`);
 }
