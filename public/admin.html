@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel | SYNAPSE Hackathon</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-card glass-card">
+                <div class="login-header">
+                    <div class="login-logo">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h1>SYNAPSE</h1>
+                    <p>Admin Panel</p>
+                </div>
+                <form id="loginForm" class="login-form">
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email</label>
+                        <input type="email" id="loginEmail" placeholder="admin@synapse.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                    <p class="login-hint">Default: admin@synapse.com / synapse2026</p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="dashboard" style="display:none;">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-logo">
+                    <i class="fas fa-bolt"></i>
+                    <span>SYNAPSE</span>
+                </a>
+                <button class="sidebar-close" id="sidebarClose"><i class="fas fa-times"></i></button>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-page="dashboard" onclick="showPage('dashboard')">
+                    <i class="fas fa-chart-pie"></i> Dashboard
+                </a>
+                <a href="#" class="nav-item" data-page="teams" onclick="showPage('teams')">
+                    <i class="fas fa-users"></i> Teams
+                </a>
+                <a href="#" class="nav-item" data-page="problems" onclick="showPage('problems')">
+                    <i class="fas fa-lightbulb"></i> Problem Statements
+                </a>
+                <a href="#" class="nav-item" data-page="announcements" onclick="showPage('announcements')">
+                    <i class="fas fa-bullhorn"></i> Announcements
+                </a>
+                <a href="#" class="nav-item" data-page="schedule" onclick="showPage('schedule')">
+                    <i class="fas fa-calendar-alt"></i> Schedule
+                </a>
+                <a href="#" class="nav-item" data-page="settings" onclick="showPage('settings')">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="/" class="nav-item"><i class="fas fa-globe"></i> View Site</a>
+                <a href="#" class="nav-item" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
+                <h2 id="pageTitle">Dashboard</h2>
+                <div class="topbar-actions">
+                    <span class="admin-name" id="adminName">Admin</span>
+                </div>
+            </header>
+
+            <!-- Dashboard Page -->
+            <div class="page active" id="page-dashboard">
+                <!-- Stats Cards -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card-admin gradient-purple">
+                        <div class="stat-icon"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatTeams">0</span>
+                            <span class="stat-lbl">Total Teams</span>
+                        </div>
+                    </div>
+                    <div class="stat-card-admin gradient-cyan">
+                        <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatParticipants">0</span>
+                            <span class="stat-lbl">Participants</span>
+                        </div>
+                    </div>
+                    <div class="stat-card-admin gradient-green">
+                        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatApproved">0</span>
+                            <span class="stat-lbl">Approved</span>
+                        </div>
+                    </div>
+                    <div class="stat-card-admin gradient-orange">
+                        <div class="stat-icon"><i class="fas fa-hourglass-half"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatPending">0</span>
+                            <span class="stat-lbl">Pending</span>
+                        </div>
+                    </div>
+                    <div class="stat-card-admin gradient-red">
+                        <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatRejected">0</span>
+                            <span class="stat-lbl">Rejected</span>
+                        </div>
+                    </div>
+                    <div class="stat-card-admin gradient-pink">
+                        <div class="stat-icon"><i class="fas fa-door-open"></i></div>
+                        <div class="stat-info">
+                            <span class="stat-val" id="adminStatCheckedIn">0</span>
+                            <span class="stat-lbl">Checked In</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-grid">
+                    <div class="chart-card glass-card">
+                        <h3><i class="fas fa-chart-bar"></i> Department Distribution</h3>
+                        <div class="chart-body" id="deptChart"></div>
+                    </div>
+                    <div class="chart-card glass-card">
+                        <h3><i class="fas fa-chart-doughnut"></i> Team Status</h3>
+                        <div class="chart-body" id="statusChart"></div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card glass-card">
+                        <h3><i class="fas fa-graduation-cap"></i> Year-wise Distribution</h3>
+                        <div class="chart-body" id="yearChart"></div>
+                    </div>
+                    <div class="chart-card glass-card">
+                        <h3><i class="fas fa-clipboard-list"></i> Problem Statement Popularity</h3>
+                        <div class="chart-body" id="psChart"></div>
+                    </div>
+                </div>
+
+                <div class="charts-grid single">
+                    <div class="chart-card glass-card">
+                        <h3><i class="fas fa-university"></i> College-wise Registrations</h3>
+                        <div class="chart-body">
+                            <table class="data-table" id="collegeTable">
+                                <thead>
+                                    <tr><th>College</th><th>Teams</th><th>Members</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Actions -->
+                <div class="export-section glass-card">
+                    <h3><i class="fas fa-file-export"></i> Export Data</h3>
+                    <div class="export-actions">
+                        <button class="btn btn-outline" onclick="exportCSV()"><i class="fas fa-file-csv"></i> Export Teams CSV</button>
+                        <button class="btn btn-outline" onclick="printReport()"><i class="fas fa-print"></i> Print Report</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teams Page -->
+            <div class="page" id="page-teams">
+                <div class="page-toolbar">
+                    <div class="toolbar-left">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="teamSearch" placeholder="Search teams..." oninput="filterTeams()">
+                        </div>
+                        <select id="teamStatusFilter" onchange="filterTeams()">
+                            <option value="all">All Status</option>
+                            <option value="registered">Registered</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="checked_in">Checked In</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="btn btn-outline btn-sm" onclick="loadTeams()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                        <button class="btn btn-outline btn-sm" onclick="exportCSV()"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div class="teams-list" id="teamsList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Problem Statements Page -->
+            <div class="page" id="page-problems">
+                <div class="page-toolbar">
+                    <h3>Manage Problem Statements</h3>
+                    <button class="btn btn-primary btn-sm" onclick="showPSModal()"><i class="fas fa-plus"></i> Add Problem</button>
+                </div>
+                <div class="items-list" id="psAdminList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Announcements Page -->
+            <div class="page" id="page-announcements">
+                <div class="page-toolbar">
+                    <h3>Manage Announcements</h3>
+                    <button class="btn btn-primary btn-sm" onclick="showAnnouncementModal()"><i class="fas fa-plus"></i> New Announcement</button>
+                </div>
+                <div class="items-list" id="announcementsAdminList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Schedule Page -->
+            <div class="page" id="page-schedule">
+                <div class="page-toolbar">
+                    <h3>Manage Event Schedule</h3>
+                    <button class="btn btn-primary btn-sm" onclick="showScheduleModal()"><i class="fas fa-plus"></i> Add Event</button>
+                </div>
+                <div class="items-list" id="scheduleAdminList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div class="page" id="page-settings">
+                <div class="settings-form glass-card">
+                    <h3><i class="fas fa-cog"></i> Event Settings</h3>
+                    <form id="settingsForm" onsubmit="saveSettings(event)">
+                        <div class="settings-grid">
+                            <div class="form-group">
+                                <label>Event Name</label>
+                                <input type="text" id="set_event_name" value="SYNAPSE">
+                            </div>
+                            <div class="form-group">
+                                <label>Event Tagline</label>
+                                <input type="text" id="set_event_tagline" value="24-Hour National Level Hackathon">
+                            </div>
+                            <div class="form-group">
+                                <label>Event Date</label>
+                                <input type="date" id="set_event_date">
+                            </div>
+                            <div class="form-group">
+                                <label>Venue</label>
+                                <input type="text" id="set_event_venue" value="V.S.B Engineering College, Karur">
+                            </div>
+                            <div class="form-group">
+                                <label>Department</label>
+                                <input type="text" id="set_event_department" value="Department of AI & Data Science">
+                            </div>
+                            <div class="form-group">
+                                <label>Max Teams</label>
+                                <input type="number" id="set_max_teams" value="50" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Email</label>
+                                <input type="email" id="set_contact_email">
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Phone</label>
+                                <input type="text" id="set_contact_phone">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Event Description</label>
+                                <textarea id="set_event_description" rows="3"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <span>Registration Open</span>
+                                    <div class="toggle-switch">
+                                        <input type="checkbox" id="set_registration_open" checked>
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay" style="display:none;">
+        <div class="modal glass-card" id="modalContent">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic Content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
