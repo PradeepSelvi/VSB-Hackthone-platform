@@ -765,7 +765,17 @@ body {
 
 .ps-ticker-title {
     color: #ffffff;
+    font-weight: 700;
     letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.ps-ticker-desc {
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 0.83rem;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
 }
 
 .ps-ticker-cat {
@@ -775,6 +785,7 @@ body {
     padding: 1px 6px;
     border-radius: 3px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .ps-ticker-sep {

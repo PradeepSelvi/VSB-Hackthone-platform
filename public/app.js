@@ -445,11 +445,13 @@ function renderProblemTicker(problems) {
     const itemsHtml = problems.map((p) => {
         const psNum = p.ps_number != null ? `PS #${String(p.ps_number).padStart(2, '0')}` : `PS-${String(p.id).padStart(2, '0')}`;
         const cat = p.category ? `<span class="ps-ticker-cat">${escapeHtml(p.category)}</span>` : '';
+        const desc = p.description ? escapeHtml(p.description.trim()) : '';
         return `
-            <div class="ps-ticker-item" onclick="handleTickerPSClick(${p.id})" title="Click to view details for ${escapeHtml(p.title)}">
+            <div class="ps-ticker-item" onclick="handleTickerPSClick(${p.id})" title="Click to view full details for ${escapeHtml(p.title)}">
                 <span class="ps-ticker-pin">📌</span>
                 <span class="ps-ticker-num">${psNum}</span>
-                <span class="ps-ticker-title">${escapeHtml(p.title)}</span>
+                <span class="ps-ticker-title">${escapeHtml(p.title)}:</span>
+                <span class="ps-ticker-desc">${desc}</span>
                 ${cat}
                 <span class="ps-ticker-sep">•</span>
             </div>
@@ -459,9 +461,9 @@ function renderProblemTicker(problems) {
     // Duplicate content twice to create a seamless infinite loop
     track.innerHTML = itemsHtml + itemsHtml;
 
-    // Dynamically adjust animation speed according to item count
+    // Dynamically adjust animation speed according to item count and text length for comfortable reading
     const totalItems = problems.length * 2;
-    const scrollSec = Math.max(35, totalItems * 2.8);
+    const scrollSec = Math.max(90, Math.round(totalItems * 6.5));
     track.style.animationDuration = `${scrollSec}s`;
 }
 
