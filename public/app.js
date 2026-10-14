@@ -1102,7 +1102,7 @@ function renderTeamLoginForm(prefillCode = '') {
                 </button>
             </form>
             <div style="text-align: center; margin-top: 1.5rem; font-size: 0.88rem; color: var(--text-muted);">
-                Don't have a Team ID yet? <a href="#register" onclick="closeTeamPortal()" style="color: var(--accent-secondary); text-decoration: underline;">Register your team here</a>
+                Don't have a Team ID yet? <span style="color: var(--accent-secondary); font-weight: 600;">Ask The Coordinators for confirmation</span>
             </div>
         </div>
     `;
