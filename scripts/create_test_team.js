@@ -47,7 +47,8 @@ async function createTestTeam() {
                 team_size: 4,
                 password: HASHED_PW,
                 problem_statement_id: psId,
-                status: 'approved'
+                status: 'approved',
+                checked_in_at: null
             })
             .eq('id', teamId);
         console.log(`Updated existing team in Supabase (ID: ${teamId})`);
@@ -97,7 +98,7 @@ async function createTestTeam() {
         localTeamId = existingLocal.id;
         localDb.prepare(`
             UPDATE teams 
-            SET team_name = ?, team_lead_email = ?, team_size = 4, password = ?, problem_statement_id = ?, status = 'approved'
+            SET team_name = ?, team_lead_email = ?, team_size = 4, password = ?, problem_statement_id = ?, status = 'approved', checked_in_at = NULL
             WHERE id = ?
         `).run(TEAM_NAME, LEAD_EMAIL, HASHED_PW, localPsId, localTeamId);
     } else {
