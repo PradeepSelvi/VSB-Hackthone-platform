@@ -9,15 +9,218 @@ let problemStatements = [];
 let currentStep = 1;
 let registrationOpen = true;
 
+// ====== Spider-Man Web Shoot Page Routing & Drag System ======
+let isPageTransitioning = false;
+let activePage = 'home';
+
+function initPageRouting() {
+    // Intercept clicks on internal navigation links or data-page triggers
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest('[data-page], a[href^="#"]');
+        if (!trigger) return;
+
+        // Skip modals or accordion buttons that aren't page transitions
+        if (trigger.closest('#teamPortalModal, #psDetailModal, .filter-btn, .nav-toggle, .site-modal, .step')) return;
+
+        let targetPage = trigger.getAttribute('data-page');
+        if (!targetPage) {
+            const href = trigger.getAttribute('href');
+            if (href && href.startsWith('#')) {
+                targetPage = href.replace('#', '');
+            }
+        }
+
+        if (!targetPage) return;
+        if (targetPage === 'hero') targetPage = 'home';
+        if (targetPage === 'announcements') targetPage = 'updates';
+
+        const validPages = ['home', 'about', 'timeline', 'problems', 'updates', 'register'];
+        if (validPages.includes(targetPage)) {
+            e.preventDefault();
+            switchPage(targetPage);
+        }
+    });
+
+    // Handle browser back/forward buttons
+    window.addEventListener('hashchange', () => {
+        let hash = (window.location.hash || '').replace('#', '').trim();
+        if (hash === 'hero') hash = 'home';
+        if (hash === 'announcements') hash = 'updates';
+        if (hash && hash !== activePage) {
+            switchPage(hash);
+        }
+    });
+
+    // Check initial hash on load
+    let initialHash = (window.location.hash || '').replace('#', '').trim();
+    if (initialHash === 'hero') initialHash = 'home';
+    if (initialHash === 'announcements') initialHash = 'updates';
+    if (initialHash && document.getElementById(`page-${initialHash}`)) {
+        switchPage(initialHash, true);
+    } else {
+        switchPage('home', true);
+    }
+}
+
+function switchPage(targetPage, skipAnimation = false) {
+    if (!targetPage) targetPage = 'home';
+    if (targetPage === 'hero') targetPage = 'home';
+    if (targetPage === 'announcements') targetPage = 'updates';
+
+    const targetEl = document.getElementById(`page-${targetPage}`);
+    if (!targetEl) return;
+    if (activePage === targetPage && !skipAnimation) return;
+
+    const currentEl = document.getElementById(`page-${activePage}`);
+    const overlay = document.getElementById('webShootOverlay');
+
+    // Update active state on nav links
+    document.querySelectorAll('.nav-link, .nav-logo').forEach(link => {
+        const page = link.getAttribute('data-page') || (link.getAttribute('href') || '').replace('#', '');
+        if (page === targetPage || (targetPage === 'home' && page === 'hero')) {
+            link.classList.add('active');
+        } else {
+            link.classList.remove('active');
+        }
+    });
+
+    // Close mobile nav menu if open
+    const navLinks = document.getElementById('navLinks');
+    const navToggle = document.getElementById('navToggle');
+    if (navLinks && navLinks.classList.contains('active')) {
+        navLinks.classList.remove('active');
+        if (navToggle) navToggle.classList.remove('active');
+    }
+
+    if (skipAnimation || !currentEl || currentEl === targetEl) {
+        document.querySelectorAll('.page-view').forEach(p => {
+            p.classList.remove('active', 'web-drag-out', 'web-drag-in');
+        });
+        targetEl.classList.add('active');
+        activePage = targetPage;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        history.replaceState(null, '', `#${targetPage}`);
+        revealPageCards(targetEl);
+        return;
+    }
+
+    if (isPageTransitioning) return;
+    isPageTransitioning = true;
+
+    // 1. Fire Spider-Man Web Shoot Animation
+    if (overlay) {
+        overlay.classList.remove('shooting');
+        void overlay.offsetWidth; // Force reflow
+        overlay.classList.add('shooting');
+    }
+
+    // 2. Drag out current page (web yank)
+    currentEl.classList.remove('active', 'web-drag-in');
+    currentEl.classList.add('web-drag-out');
+
+    // 3. Sling-shot incoming page into view
+    setTimeout(() => {
+        currentEl.classList.remove('web-drag-out');
+
+        targetEl.classList.remove('web-drag-out');
+        targetEl.classList.add('active', 'web-drag-in');
+        activePage = targetPage;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        history.replaceState(null, '', `#${targetPage}`);
+        revealPageCards(targetEl);
+
+        setTimeout(() => {
+            targetEl.classList.remove('web-drag-in');
+            if (overlay) overlay.classList.remove('shooting');
+            isPageTransitioning = false;
+        }, 500);
+    }, 280);
+}
+
+function revealPageCards(container) {
+    if (!container) return;
+    container.querySelectorAll('.about-card, .problem-card, .timeline-item, .announcement-card, .stat-card, .glass-card').forEach(el => {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+    });
+}
+
 // ====== Initialize ======
 document.addEventListener('DOMContentLoaded', () => {
     initParticles();
     initNavbar();
+    initPageRouting();
     initCodeTyping();
+    initFallingTitle();
     loadPublicData();
     initRegistrationForm();
     initScrollAnimations();
 });
+
+// ====== Falling-apart Hero Title (hover each letter -> plunge to bottom) ======
+function initFallingTitle() {
+    const heroTitle = document.querySelector('.hero-title');
+    if (!heroTitle || heroTitle.dataset.fallingInit) return;
+    heroTitle.dataset.fallingInit = '1';
+
+    const titleLine = heroTitle.querySelector('.title-line');
+    const titleSub = heroTitle.querySelector('.title-sub');
+
+    function splitIntoChars(el) {
+        if (!el) return;
+        const rawText = el.textContent.trim();
+        el.innerHTML = [...rawText].map(c => {
+            if (c === ' ') {
+                return '<span class="fall-space">&nbsp;</span>';
+            }
+            return `<span class="fall-char">${c}</span>`;
+        }).join('');
+    }
+
+    splitIntoChars(titleLine);
+    splitIntoChars(titleSub);
+
+    function triggerCharFall(ch) {
+        if (ch.classList.contains('falling')) return;
+
+        const rect = ch.getBoundingClientRect();
+        const heroRect = heroTitle.getBoundingClientRect();
+
+        // Drop completely past the bottom of the viewport
+        const dropDistance = Math.max(window.innerHeight - rect.top + 220, 800);
+        const ty = (dropDistance + Math.random() * 250).toFixed(0) + 'px';
+
+        // Lateral break apart: outward drift based on position relative to center
+        const centerOffset = (rect.left + rect.width / 2) - (heroRect.left + heroRect.width / 2);
+        const dir = centerOffset >= 0 ? 1 : -1;
+        const tx = (dir * (40 + Math.random() * 120) + (Math.random() - 0.5) * 60).toFixed(0) + 'px';
+
+        // Realistic tumbling rotation as it falls
+        const rot = ((Math.random() - 0.5) * 360).toFixed(0) + 'deg';
+
+        // Snappy responsive fall
+        const dur = (0.75 + Math.random() * 0.3).toFixed(2) + 's';
+
+        ch.style.setProperty('--tx', tx);
+        ch.style.setProperty('--ty', ty);
+        ch.style.setProperty('--rot', rot);
+        ch.style.setProperty('--dur', dur);
+        ch.style.setProperty('--delay', '0s');
+
+        ch.classList.add('falling');
+
+        // Smoothly slingshot character back into place after 2.2s
+        setTimeout(() => {
+            ch.classList.remove('falling');
+        }, 2200);
+    }
+
+    const allChars = heroTitle.querySelectorAll('.fall-char');
+    allChars.forEach(ch => {
+        ch.addEventListener('mouseenter', () => triggerCharFall(ch));
+        ch.addEventListener('touchstart', () => triggerCharFall(ch), { passive: true });
+    });
+}
 
 // ====== Particles Animation ======
 function initParticles() {
@@ -28,7 +231,7 @@ function initParticles() {
         particle.style.left = Math.random() * 100 + '%';
         particle.style.animationDelay = Math.random() * 8 + 's';
         particle.style.animationDuration = (6 + Math.random() * 6) + 's';
-        const colors = ['#6c5ce7', '#00cec9', '#fd79a8', '#fdcb6e', '#a29bfe'];
+        const colors = ['#cc0000', '#ff3333', '#1565c0', '#ff1744', '#d0cdd8', '#42a5f5', '#ff6f00'];
         particle.style.background = colors[Math.floor(Math.random() * colors.length)];
         particle.style.width = (2 + Math.random() * 3) + 'px';
         particle.style.height = particle.style.width;
@@ -63,6 +266,7 @@ function initNavbar() {
 // ====== Code Typing Animation ======
 function initCodeTyping() {
     const codeEl = document.getElementById('codeTyping');
+    if (!codeEl) return;
     const codeLines = [
         { text: '<span class="comment"># SYNAPSE - 24hr Hackathon</span>', delay: 0 },
         { text: '<span class="keyword">import</span> <span class="function">innovation</span>', delay: 100 },
@@ -1094,6 +1298,31 @@ function renderTeamDashboard(data) {
                                style="width: 100%; padding: 0.65rem 0.9rem; border-radius: 8px; background: rgba(10,10,15,0.6); border: 1px solid rgba(255,255,255,0.1); color: white; font-size: 0.9rem;">
                     </div>
                 </div>
+                <!-- Supabase Cloud Storage File Upload -->
+                <div class="form-group" style="margin-bottom: 1.25rem; padding: 1rem; border-radius: 8px; background: rgba(10,10,25,0.5); border: 1px dashed rgba(255,255,255,0.18);">
+                    <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.6rem;">
+                        <span><i class="fas fa-cloud-upload-alt" style="color: var(--accent-cyan);"></i> Project File / PPT / ZIP / PDF (Supabase Storage)</span>
+                        <span style="font-size: 0.72rem; color: var(--accent-cyan); font-family: var(--font-mono); background: rgba(0, 206, 201, 0.1); padding: 0.15rem 0.5rem; border-radius: 4px;">Max 50MB</span>
+                    </label>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                        <input type="file" id="sub_file_input" accept=".zip,.rar,.tar.gz,.pdf,.pptx,.ppt,.docx,.png,.jpg" 
+                               style="font-size: 0.82rem; color: var(--text-secondary); background: transparent; flex: 1; min-width: 200px;">
+                        <button type="button" class="btn btn-outline btn-sm" id="uploadFileBtn" onclick="uploadSubmissionFile()">
+                            <i class="fas fa-cloud-upload-alt"></i> Upload to Cloud
+                        </button>
+                    </div>
+                    <div id="uploadStatusMsg" style="margin-top: 0.5rem; font-size: 0.8rem;"></div>
+                    ${team.submission_file_url ? `
+                        <div id="uploadedFileLink" style="margin-top: 0.6rem; padding: 0.5rem 0.8rem; background: rgba(108,92,231,0.15); border: 1px solid rgba(108,92,231,0.3); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                            <span style="font-size: 0.82rem; color: #a29bfe;"><i class="fas fa-check-circle" style="color: var(--accent-green);"></i> Active File Stored in Cloud</span>
+                            <a href="${team.submission_file_url}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; text-decoration: none;">
+                                <i class="fas fa-external-link-alt"></i> View / Download Stored File
+                            </a>
+                        </div>
+                    ` : `
+                        <div id="uploadedFileLink" style="display: none; margin-top: 0.6rem; padding: 0.5rem 0.8rem; background: rgba(108,92,231,0.15); border: 1px solid rgba(108,92,231,0.3); border-radius: 6px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    `}
+                </div>
                 <div class="form-group" style="margin-bottom: 1rem;">
                     <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem;">
                         <i class="fas fa-sticky-note"></i> Tech Stack & Implementation Notes
@@ -1145,6 +1374,64 @@ function startCountdownTimer(startTimeStr) {
 
     update();
     teamCountdownInterval = setInterval(update, 1000);
+}
+
+async function uploadSubmissionFile() {
+    const fileInput = document.getElementById('sub_file_input');
+    const statusMsg = document.getElementById('uploadStatusMsg');
+    const uploadBtn = document.getElementById('uploadFileBtn');
+    const token = localStorage.getItem('synapse_team_token');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showToast('Please select a file to upload first.', 'error');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    if (file.size > 52428800) { // 50MB
+        showToast('File exceeds 50MB limit.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<span class="spinner"></span> Uploading...';
+    statusMsg.innerHTML = '<span style="color: var(--accent-cyan);"><i class="fas fa-spinner fa-spin"></i> Uploading to Supabase cloud storage...</span>';
+
+    try {
+        const res = await fetch(`${API_BASE}/team/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+        statusMsg.innerHTML = `<span style="color: var(--accent-green);"><i class="fas fa-check-circle"></i> ${data.message}</span>`;
+        showToast('File uploaded successfully!', 'success');
+
+        const linkContainer = document.getElementById('uploadedFileLink');
+        if (linkContainer) {
+            linkContainer.style.display = 'flex';
+            linkContainer.innerHTML = `
+                <span style="font-size: 0.82rem; color: #a29bfe;"><i class="fas fa-check-circle" style="color: var(--accent-green);"></i> Stored: ${data.fileName}</span>
+                <a href="${data.fileUrl}" target="_blank" class="btn btn-primary btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; text-decoration: none;">
+                    <i class="fas fa-external-link-alt"></i> View Stored File
+                </a>
+            `;
+        }
+    } catch (err) {
+        statusMsg.innerHTML = `<span style="color: var(--accent-red);"><i class="fas fa-exclamation-triangle"></i> ${err.message}</span>`;
+        showToast(err.message, 'error');
+    } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-cloud-upload-alt"></i> Upload to Cloud';
+    }
 }
 
 async function saveProjectSubmission(e) {

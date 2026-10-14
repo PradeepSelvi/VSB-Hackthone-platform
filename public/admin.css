@@ -1,31 +1,33 @@
 /* ================================================
-   SYNAPSE - Admin Panel CSS
+   SYNAPSE - Admin Panel CSS | Spider-Man Theme
    ================================================ */
 
-/* === Variables (same design system) === */
+/* === Variables (Spider-Man Design System) === */
 :root {
-    --bg-primary: #0a0a0f;
-    --bg-secondary: #12121a;
-    --bg-tertiary: #1a1a2e;
-    --bg-card: rgba(20, 20, 35, 0.8);
-    --text-primary: #e8e8f0;
-    --text-secondary: #a0a0b8;
-    --text-muted: #6b6b80;
-    --accent-primary: #6c5ce7;
-    --accent-secondary: #a29bfe;
-    --accent-cyan: #00cec9;
-    --accent-pink: #fd79a8;
-    --accent-orange: #fdcb6e;
-    --accent-red: #ff6b6b;
-    --accent-green: #55efc4;
-    --gradient-primary: linear-gradient(135deg, #6c5ce7 0%, #00cec9 100%);
-    --gradient-secondary: linear-gradient(135deg, #fd79a8 0%, #fdcb6e 100%);
-    --glass-bg: rgba(20, 20, 40, 0.6);
-    --glass-border: rgba(108, 92, 231, 0.2);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --bg-primary: #080810;
+    --bg-secondary: #0f0f1a;
+    --bg-tertiary: #14101e;
+    --bg-card: rgba(18, 8, 14, 0.85);
+    --text-primary: #f0eef5;
+    --text-secondary: #b8a8c8;
+    --text-muted: #6b5a7a;
+    --accent-primary: #cc0000;
+    --accent-secondary: #ff3333;
+    --accent-cyan: #1565c0;
+    --accent-pink: #e91e63;
+    --accent-orange: #ff6f00;
+    --accent-red: #ff1744;
+    --accent-green: #b0bec5;
+    --accent-blue: #1976d2;
+    --accent-silver: #d0cdd8;
+    --gradient-primary: linear-gradient(135deg, #cc0000 0%, #1565c0 100%);
+    --gradient-secondary: linear-gradient(135deg, #ff1744 0%, #ff6f00 100%);
+    --glass-bg: rgba(15, 5, 10, 0.65);
+    --glass-border: rgba(204, 0, 0, 0.25);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     --border-radius: 12px;
     --border-radius-lg: 20px;
-    --font-display: 'Orbitron', sans-serif;
+    --font-display: 'Rajdhani', 'Orbitron', sans-serif;
     --font-body: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -50,9 +52,34 @@ body {
     justify-content: center;
     background: var(--bg-primary);
     background-image:
-        linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
+        radial-gradient(circle at 50% 40%, rgba(204, 0, 0, 0.06) 0%, transparent 60%),
+        linear-gradient(135deg, rgba(204, 0, 0, 0.04) 1px, transparent 1px),
+        linear-gradient(45deg,  rgba(204, 0, 0, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(21, 101, 192, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(21, 101, 192, 0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 50px 50px, 50px 50px, 50px 50px, 50px 50px;
+}
+
+/* Spider-Web Corner Accents */
+.web-corner {
+    position: fixed;
+    width: 170px;
+    height: 170px;
+    pointer-events: none;
+    z-index: 99;
+    opacity: 0.35;
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%23cc0000' stroke-width='1.2'%3E%3Cpath d='M0 0 L100 0 M0 0 L92 38 M0 0 L70 70 M0 0 L38 92 M0 0 L0 100' stroke='%23ff1744' stroke-width='0.9'/%3E%3Cpath d='M20 0 Q18 8 14 14 Q8 18 0 20'/%3E%3Cpath d='M40 0 Q36 16 28 28 Q16 36 0 40'/%3E%3Cpath d='M60 0 Q54 24 42 42 Q24 54 0 60'/%3E%3Cpath d='M80 0 Q72 32 56 56 Q32 72 0 80'/%3E%3Cpath d='M100 0 Q90 40 70 70 Q40 90 0 100'/%3E%3C/svg%3E");
+}
+.web-corner-tl {
+    top: 0;
+    left: 0;
+}
+.web-corner-tr {
+    top: 0;
+    right: 0;
+    transform: scaleX(-1);
 }
 
 .login-container { width: 100%; max-width: 420px; padding: 1.5rem; }
@@ -76,7 +103,7 @@ body {
     font-size: 2rem;
     color: white;
     margin: 0 auto 1rem;
-    box-shadow: 0 8px 25px rgba(108, 92, 231, 0.4);
+    box-shadow: 0 8px 25px rgba(204, 0, 0, 0.4);
 }
 
 .login-header h1 {
@@ -119,7 +146,7 @@ body {
 
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+    box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.15);
 }
 
 .form-group select {
@@ -140,15 +167,15 @@ body {
 
 .btn-primary {
     background: var(--gradient-primary); color: white;
-    box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+    box-shadow: 0 4px 15px rgba(204, 0, 0, 0.3);
 }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(108, 92, 231, 0.4); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(204, 0, 0, 0.4); }
 
 .btn-outline {
     background: transparent; color: var(--text-primary);
     border: 1px solid var(--glass-border);
 }
-.btn-outline:hover { border-color: var(--accent-primary); background: rgba(108, 92, 231, 0.1); }
+.btn-outline:hover { border-color: var(--accent-primary); background: rgba(204, 0, 0, 0.1); }
 
 .btn-sm { padding: 0.4rem 1rem; font-size: 0.8rem; }
 .btn-block { width: 100%; justify-content: center; }
@@ -214,8 +241,8 @@ body {
     transition: var(--transition);
 }
 
-.nav-item:hover { background: rgba(108, 92, 231, 0.1); color: var(--text-primary); }
-.nav-item.active { background: rgba(108, 92, 231, 0.2); color: var(--accent-secondary); }
+.nav-item:hover { background: rgba(204, 0, 0, 0.1); color: var(--text-primary); }
+.nav-item.active { background: rgba(204, 0, 0, 0.2); color: var(--accent-secondary); }
 .nav-item i { width: 20px; text-align: center; }
 
 .sidebar-footer {
@@ -284,12 +311,12 @@ body {
 
 .stat-card-admin:hover { transform: translateY(-3px); }
 
-.gradient-purple { background: linear-gradient(135deg, rgba(108, 92, 231, 0.2), rgba(108, 92, 231, 0.05)); border: 1px solid rgba(108, 92, 231, 0.3); }
-.gradient-cyan { background: linear-gradient(135deg, rgba(0, 206, 201, 0.2), rgba(0, 206, 201, 0.05)); border: 1px solid rgba(0, 206, 201, 0.3); }
+.gradient-purple { background: linear-gradient(135deg, rgba(204, 0, 0, 0.2), rgba(204, 0, 0, 0.05)); border: 1px solid rgba(204, 0, 0, 0.3); }
+.gradient-cyan { background: linear-gradient(135deg, rgba(21, 101, 192, 0.2), rgba(21, 101, 192, 0.05)); border: 1px solid rgba(21, 101, 192, 0.3); }
 .gradient-green { background: linear-gradient(135deg, rgba(85, 239, 196, 0.2), rgba(85, 239, 196, 0.05)); border: 1px solid rgba(85, 239, 196, 0.3); }
 .gradient-orange { background: linear-gradient(135deg, rgba(253, 203, 110, 0.2), rgba(253, 203, 110, 0.05)); border: 1px solid rgba(253, 203, 110, 0.3); }
 .gradient-red { background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 107, 107, 0.05)); border: 1px solid rgba(255, 107, 107, 0.3); }
-.gradient-pink { background: linear-gradient(135deg, rgba(253, 121, 168, 0.2), rgba(253, 121, 168, 0.05)); border: 1px solid rgba(253, 121, 168, 0.3); }
+.gradient-pink { background: linear-gradient(135deg, rgba(255, 23, 68, 0.2), rgba(255, 23, 68, 0.05)); border: 1px solid rgba(255, 23, 68, 0.3); }
 
 .stat-icon {
     width: 48px; height: 48px;
@@ -297,12 +324,12 @@ body {
     border-radius: 12px; font-size: 1.3rem;
 }
 
-.gradient-purple .stat-icon { background: rgba(108, 92, 231, 0.2); color: var(--accent-secondary); }
-.gradient-cyan .stat-icon { background: rgba(0, 206, 201, 0.2); color: var(--accent-cyan); }
+.gradient-purple .stat-icon { background: rgba(204, 0, 0, 0.2); color: var(--accent-secondary); }
+.gradient-cyan .stat-icon { background: rgba(21, 101, 192, 0.2); color: var(--accent-cyan); }
 .gradient-green .stat-icon { background: rgba(85, 239, 196, 0.2); color: var(--accent-green); }
 .gradient-orange .stat-icon { background: rgba(253, 203, 110, 0.2); color: var(--accent-orange); }
 .gradient-red .stat-icon { background: rgba(255, 107, 107, 0.2); color: var(--accent-red); }
-.gradient-pink .stat-icon { background: rgba(253, 121, 168, 0.2); color: var(--accent-pink); }
+.gradient-pink .stat-icon { background: rgba(255, 23, 68, 0.2); color: var(--accent-pink); }
 
 .stat-val { display: block; font-family: var(--font-display); font-size: 1.6rem; font-weight: 800; }
 .stat-lbl { font-size: 0.8rem; color: var(--text-muted); }
@@ -441,7 +468,7 @@ body {
 }
 
 .data-table td { color: var(--text-secondary); }
-.data-table tbody tr:hover { background: rgba(108, 92, 231, 0.05); }
+.data-table tbody tr:hover { background: rgba(204, 0, 0, 0.05); }
 
 /* === Export Section === */
 .export-section {
@@ -510,7 +537,7 @@ body {
     transition: var(--transition);
 }
 
-.team-card:hover { border-color: rgba(108, 92, 231, 0.4); }
+.team-card:hover { border-color: rgba(204, 0, 0, 0.4); }
 
 .team-card-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -531,10 +558,10 @@ body {
     text-transform: uppercase; letter-spacing: 0.5px;
 }
 
-.status-registered { background: rgba(108, 92, 231, 0.15); color: var(--accent-secondary); }
+.status-registered { background: rgba(204, 0, 0, 0.15); color: var(--accent-secondary); }
 .status-approved { background: rgba(85, 239, 196, 0.15); color: var(--accent-green); }
 .status-rejected { background: rgba(255, 107, 107, 0.15); color: var(--accent-red); }
-.status-checked_in { background: rgba(0, 206, 201, 0.15); color: var(--accent-cyan); }
+.status-checked_in { background: rgba(21, 101, 192, 0.15); color: var(--accent-cyan); }
 
 .team-meta {
     display: flex; gap: 1.5rem; flex-wrap: wrap;
@@ -583,7 +610,7 @@ body {
     transition: var(--transition);
 }
 
-.item-card:hover { border-color: rgba(108, 92, 231, 0.3); }
+.item-card:hover { border-color: rgba(204, 0, 0, 0.3); }
 
 .item-card-header {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -601,7 +628,7 @@ body {
 
 .item-meta .tag {
     padding: 0.15rem 0.5rem;
-    background: rgba(108, 92, 231, 0.15);
+    background: rgba(204, 0, 0, 0.15);
     border-radius: 50px;
     color: var(--accent-secondary);
 }
@@ -639,7 +666,7 @@ body {
 
 .settings-grid textarea:focus {
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+    box-shadow: 0 0 0 3px rgba(204, 0, 0, 0.15);
 }
 
 /* Toggle Switch */

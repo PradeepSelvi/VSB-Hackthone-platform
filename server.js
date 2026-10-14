@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { initializeDatabase } = require('./db/database');
+const { isSupabaseConfigured } = require('./db/supabase');
 const adminRoutes = require('./routes/admin');
 const publicRoutes = require('./routes/public');
 
