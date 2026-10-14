@@ -361,7 +361,10 @@ async function loadPublicData() {
 
         // Render sections safely
         if (schedule) renderSchedule(schedule);
-        if (ps) renderProblems(ps);
+        if (ps) {
+            renderProblems(ps);
+            renderProblemTicker(ps);
+        }
         if (announcements) renderAnnouncements(announcements);
         if (ps) populateProblemSelect(ps);
         if (settings) updateSettings(settings);
@@ -426,6 +429,51 @@ function renderSchedule(schedule) {
             </div>
         `;
     }).join('');
+}
+
+// ====== Problem Statements Running Marquee Ticker ======
+function renderProblemTicker(problems) {
+    const track = document.getElementById('psTickerContent');
+    if (!track) return;
+    if (!problems || !problems.length) {
+        track.innerHTML = `
+            <span class="ps-ticker-item">📌 Problem Statements will be announced shortly! Stay tuned!</span>
+        `;
+        return;
+    }
+
+    const itemsHtml = problems.map((p) => {
+        const psNum = p.ps_number != null ? `PS #${String(p.ps_number).padStart(2, '0')}` : `PS-${String(p.id).padStart(2, '0')}`;
+        const cat = p.category ? `<span class="ps-ticker-cat">${escapeHtml(p.category)}</span>` : '';
+        return `
+            <div class="ps-ticker-item" onclick="handleTickerPSClick(${p.id})" title="Click to view details for ${escapeHtml(p.title)}">
+                <span class="ps-ticker-pin">📌</span>
+                <span class="ps-ticker-num">${psNum}</span>
+                <span class="ps-ticker-title">${escapeHtml(p.title)}</span>
+                ${cat}
+                <span class="ps-ticker-sep">•</span>
+            </div>
+        `;
+    }).join('');
+
+    // Duplicate content twice to create a seamless infinite loop
+    track.innerHTML = itemsHtml + itemsHtml;
+
+    // Dynamically adjust animation speed according to item count
+    const totalItems = problems.length * 2;
+    const scrollSec = Math.max(35, totalItems * 2.8);
+    track.style.animationDuration = `${scrollSec}s`;
+}
+
+function handleTickerPSClick(id) {
+    if (typeof switchPage === 'function') {
+        switchPage('problems');
+    }
+    setTimeout(() => {
+        if (typeof openPSDetail === 'function') {
+            openPSDetail(id);
+        }
+    }, 280);
 }
 
 // ====== Render Problems ======

@@ -649,20 +649,164 @@ body {
     color: var(--accent-red);
 }
 
-/* === Hero Background Backdrop (Logo as Background - Slightly Visible) === */
-#page-home {
+/* === Problem Statements Running Area (VSB Red Marquee Style) === */
+.ps-ticker-bar {
     position: relative;
-    overflow: hidden;
-    min-height: calc(100vh - 80px);
     width: 100%;
+    margin-top: 76px; /* Sits flush under fixed navbar */
+    background: linear-gradient(90deg, #990000 0%, #cc0000 45%, #e71a1a 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 18px rgba(204, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    height: 44px;
+    overflow: hidden;
+    z-index: 50;
+    user-select: none;
 }
 
-.hero-bg-backdrop {
-    display: none !important;
+.ps-ticker-label {
+    background: #7a0000;
+    color: #ffffff;
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    padding: 0 1.25rem;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    white-space: nowrap;
+    z-index: 5;
+    box-shadow: 5px 0 15px rgba(0, 0, 0, 0.45);
+    flex-shrink: 0;
+    border-right: 2px solid rgba(255, 255, 255, 0.25);
 }
 
-.hero-visual {
-    display: none !important;
+.ps-ticker-pulse {
+    width: 8px;
+    height: 8px;
+    background: #00ff88;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #00ff88;
+    animation: psTickerPulse 1.4s infinite;
+}
+
+@keyframes psTickerPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.ps-ticker-viewport {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    mask-image: linear-gradient(to right, transparent 0%, black 1.5%, black 98.5%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 1.5%, black 98.5%, transparent 100%);
+}
+
+.ps-ticker-content {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    will-change: transform;
+    animation: psTickerScroll 50s linear infinite;
+}
+
+.ps-ticker-bar:hover .ps-ticker-content,
+.ps-ticker-content:hover {
+    animation-play-state: paused;
+}
+
+@keyframes psTickerScroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.ps-ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0 1.25rem;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.ps-ticker-item:hover {
+    color: #ffeaa7;
+    transform: translateY(-1px);
+}
+
+.ps-ticker-pin {
+    font-size: 0.95rem;
+    color: #ffd32a;
+}
+
+.ps-ticker-num {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #ffeaa7;
+    padding: 1px 7px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.ps-ticker-title {
+    color: #ffffff;
+    letter-spacing: 0.3px;
+}
+
+.ps-ticker-cat {
+    background: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.ps-ticker-sep {
+    color: rgba(255, 255, 255, 0.4);
+    margin-left: 0.4rem;
+    font-weight: 700;
+}
+
+#page-home .hero {
+    min-height: calc(100vh - 120px);
+    padding: 3.5rem 1.5rem 4rem;
+}
+
+@media (max-width: 768px) {
+    .ps-ticker-bar {
+        margin-top: 65px;
+        height: 38px;
+    }
+    .ps-ticker-label {
+        font-size: 0.72rem;
+        padding: 0 0.8rem;
+    }
+    .ticker-label-text {
+        display: none;
+    }
+    .ps-ticker-item {
+        font-size: 0.78rem;
+        padding: 0 0.75rem;
+    }
+    #page-home .hero {
+        padding: 2.5rem 1rem 3rem;
+    }
 }
 
 /* === Distinct Page Views & Web-Shoot Drag Transition === */
