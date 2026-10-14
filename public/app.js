@@ -1477,7 +1477,7 @@ async function rollRandomProblemStatement() {
         showToast(`🎉 Challenge Drawn: ${landedPs ? landedPs.title : 'Problem Statement Unlocked!'}`, 'success');
 
         // Re-open dashboard with freshly unlocked PS and running 24h timer
-        await openTeamDashboard();
+        await loadTeamDashboard();
 
     } catch (err) {
         clearInterval(tickerInterval);

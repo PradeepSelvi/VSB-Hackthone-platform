@@ -7,8 +7,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate:supabase": "node scripts/migrate_to_supabase.js",
-    "test": "node scripts/audit_test.js",
-    "test:audit": "node scripts/audit_test.js"
+    "test": "node scripts/test_supabase_platform.js",
+    "test:upload": "node scripts/test_upload_flow.js"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +17,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.7",
     "express": "^5.3.0",

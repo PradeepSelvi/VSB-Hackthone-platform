@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { initializeDatabase } = require('./db/database');
 const { isSupabaseConfigured } = require('./db/supabase');
 const adminRoutes = require('./routes/admin');
 const publicRoutes = require('./routes/public');
@@ -51,12 +50,10 @@ app.use((req, res) => {
     }
 });
 
-// Initialize database and start server
-initializeDatabase();
-
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`\n🚀 SYNAPSE Hackathon Server running at http://localhost:${PORT}`);
+        console.log(`☁️  Database: Supabase Cloud (${isSupabaseConfigured() ? 'Connected' : 'Missing Supabase credentials'})`);
         console.log(`📋 Admin Panel: http://localhost:${PORT}/admin`);
         console.log(`🔐 Default Admin: ${process.env.ADMIN_EMAIL || 'admin@synapse.com'} / ${process.env.ADMIN_PASSWORD || 'synapse2026'}\n`);
     });

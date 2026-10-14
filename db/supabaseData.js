@@ -717,6 +717,205 @@ async function deleteAdminTeam(teamId) {
     return true;
 }
 
+async function getAllProblemStatementsAdmin() {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('problem_statements')
+        .select('*')
+        .order('ps_number', { ascending: true })
+        .order('id', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+async function createProblemStatement(psData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    // Find max ps_number
+    const { data: maxRow } = await supabase
+        .from('problem_statements')
+        .select('ps_number')
+        .order('ps_number', { ascending: false })
+        .limit(1);
+    const nextPsNum = (maxRow && maxRow[0] && maxRow[0].ps_number) ? maxRow[0].ps_number + 1 : 1;
+
+    const { data, error } = await supabase
+        .from('problem_statements')
+        .insert({
+            ps_number: psData.ps_number || nextPsNum,
+            title: psData.title,
+            description: psData.description,
+            problem_faced: psData.problem_faced || '',
+            suggested_solution: psData.suggested_solution || '',
+            category: psData.category,
+            difficulty: psData.difficulty || 'medium',
+            is_active: psData.is_active !== undefined ? (psData.is_active ? 1 : 0) : 1
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function updateProblemStatement(id, psData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const payload = {};
+    if (psData.title !== undefined) payload.title = psData.title;
+    if (psData.description !== undefined) payload.description = psData.description;
+    if (psData.problem_faced !== undefined) payload.problem_faced = psData.problem_faced;
+    if (psData.suggested_solution !== undefined) payload.suggested_solution = psData.suggested_solution;
+    if (psData.category !== undefined) payload.category = psData.category;
+    if (psData.difficulty !== undefined) payload.difficulty = psData.difficulty;
+    if (psData.is_active !== undefined) payload.is_active = psData.is_active ? 1 : 0;
+
+    const { data, error } = await supabase
+        .from('problem_statements')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function deleteProblemStatement(id) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    // Clear foreign keys in teams first
+    await supabase.from('teams').update({ problem_statement_id: null }).eq('problem_statement_id', id);
+    const { error } = await supabase.from('problem_statements').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+}
+
+async function getAllAnnouncementsAdmin() {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+async function createAnnouncement(annData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase
+        .from('announcements')
+        .insert({
+            title: annData.title,
+            message: annData.message,
+            priority: annData.priority || 'normal',
+            is_active: annData.is_active !== undefined ? (annData.is_active ? 1 : 0) : 1
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function updateAnnouncement(id, annData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const payload = {};
+    if (annData.title !== undefined) payload.title = annData.title;
+    if (annData.message !== undefined) payload.message = annData.message;
+    if (annData.priority !== undefined) payload.priority = annData.priority;
+    if (annData.is_active !== undefined) payload.is_active = annData.is_active ? 1 : 0;
+
+    const { data, error } = await supabase
+        .from('announcements')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function deleteAnnouncement(id) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+}
+
+async function getAllScheduleAdmin() {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('schedule')
+        .select('*')
+        .order('start_time', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+async function createScheduleEvent(eventData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase
+        .from('schedule')
+        .insert({
+            title: eventData.title,
+            description: eventData.description || '',
+            start_time: eventData.start_time,
+            end_time: eventData.end_time || null,
+            location: eventData.location || '',
+            event_type: eventData.event_type || 'general',
+            is_active: eventData.is_active !== undefined ? (eventData.is_active ? 1 : 0) : 1
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function updateScheduleEvent(id, eventData) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const payload = {};
+    if (eventData.title !== undefined) payload.title = eventData.title;
+    if (eventData.description !== undefined) payload.description = eventData.description;
+    if (eventData.start_time !== undefined) payload.start_time = eventData.start_time;
+    if (eventData.end_time !== undefined) payload.end_time = eventData.end_time;
+    if (eventData.location !== undefined) payload.location = eventData.location;
+    if (eventData.event_type !== undefined) payload.event_type = eventData.event_type;
+    if (eventData.is_active !== undefined) payload.is_active = eventData.is_active ? 1 : 0;
+
+    const { data, error } = await supabase
+        .from('schedule')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+async function deleteScheduleEvent(id) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { error } = await supabase.from('schedule').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+}
+
+async function updateEventSettings(settingsObj) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const upsertList = Object.entries(settingsObj).map(([key, value]) => ({ key, value: String(value) }));
+    const { error } = await supabase.from('event_settings').upsert(upsertList, { onConflict: 'key' });
+    if (error) throw error;
+    return true;
+}
+
 module.exports = {
     getProblemStatements,
     getAnnouncements,
@@ -737,5 +936,18 @@ module.exports = {
     updateAdminTeamStatus,
     checkinAdminTeam,
     reallocateAdminTeam,
-    deleteAdminTeam
+    deleteAdminTeam,
+    getAllProblemStatementsAdmin,
+    createProblemStatement,
+    updateProblemStatement,
+    deleteProblemStatement,
+    getAllAnnouncementsAdmin,
+    createAnnouncement,
+    updateAnnouncement,
+    deleteAnnouncement,
+    getAllScheduleAdmin,
+    createScheduleEvent,
+    updateScheduleEvent,
+    deleteScheduleEvent,
+    updateEventSettings
 };

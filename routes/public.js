@@ -2,16 +2,13 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const { getDb } = require('../db/database');
 const { authenticateTeamToken } = require('../middleware/auth');
 const { isSupabaseConfigured, getSupabase, uploadToSupabaseStorage } = require('../db/supabase');
 const supabaseData = require('../db/supabaseData');
 
 const router = express.Router();
 
-// Multer upload config (50MB memory storage for cloud/local pipe)
+// Multer upload config (50MB memory storage for cloud pipe)
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 50 * 1024 * 1024 }
@@ -20,94 +17,61 @@ const upload = multer({
 // Get active problem statements (public)
 router.get('/problem-statements', async (req, res) => {
     try {
-        if (isSupabaseConfigured()) {
-            const ps = await supabaseData.getProblemStatements();
-            if (ps && ps.length > 0) return res.json(ps);
-        }
-        const db = getDb();
-        const ps = db.prepare('SELECT * FROM problem_statements WHERE is_active = 1 ORDER BY ps_number ASC, category, title').all();
-        res.json(ps);
+        const ps = await supabaseData.getProblemStatements();
+        res.json(ps || []);
     } catch (err) {
-        console.error('Error fetching problem statements:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error fetching problem statements from Supabase:', err);
+        res.status(500).json({ error: 'Server error loading problem statements.' });
     }
 });
 
 // Get active announcements (public)
 router.get('/announcements', async (req, res) => {
     try {
-        if (isSupabaseConfigured()) {
-            const announcements = await supabaseData.getAnnouncements();
-            if (announcements) return res.json(announcements);
-        }
-        const db = getDb();
-        const announcements = db.prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT 20').all();
-        res.json(announcements);
+        const announcements = await supabaseData.getAnnouncements();
+        res.json(announcements || []);
     } catch (err) {
-        console.error('Error fetching announcements:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error fetching announcements from Supabase:', err);
+        res.status(500).json({ error: 'Server error loading announcements.' });
     }
 });
 
 // Get event schedule (public)
 router.get('/schedule', async (req, res) => {
     try {
-        if (isSupabaseConfigured()) {
-            const schedule = await supabaseData.getSchedule();
-            if (schedule) return res.json(schedule);
-        }
-        const db = getDb();
-        const schedule = db.prepare('SELECT * FROM schedule WHERE is_active = 1 ORDER BY start_time ASC').all();
-        res.json(schedule);
+        const schedule = await supabaseData.getSchedule();
+        res.json(schedule || []);
     } catch (err) {
-        console.error('Error fetching schedule:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error fetching schedule from Supabase:', err);
+        res.status(500).json({ error: 'Server error loading schedule.' });
     }
 });
 
 // Get event settings (public)
 router.get('/settings', async (req, res) => {
     try {
-        if (isSupabaseConfigured()) {
-            const settingsObj = await supabaseData.getEventSettings();
-            if (settingsObj) return res.json(settingsObj);
-        }
-        const db = getDb();
-        const settings = db.prepare('SELECT * FROM event_settings').all();
-        const settingsObj = {};
-        settings.forEach(s => { settingsObj[s.key] = s.value; });
-        res.json(settingsObj);
+        const settingsObj = await supabaseData.getEventSettings();
+        res.json(settingsObj || {});
     } catch (err) {
-        console.error('Error fetching settings:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error fetching settings from Supabase:', err);
+        res.status(500).json({ error: 'Server error loading settings.' });
     }
 });
 
 // Get registration stats (public - limited)
 router.get('/stats', async (req, res) => {
     try {
-        if (isSupabaseConfigured()) {
-            const stats = await supabaseData.getPublicStats();
-            if (stats) return res.json(stats);
-        }
-        const db = getDb();
-        const totalTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
-        const totalParticipants = db.prepare('SELECT COUNT(*) as count FROM team_members').get().count;
-        const totalPS = db.prepare('SELECT COUNT(*) as count FROM problem_statements WHERE is_active = 1').get().count;
-        const settings = db.prepare('SELECT * FROM event_settings').all();
-        const settingsObj = {};
-        settings.forEach(s => { settingsObj[s.key] = s.value; });
-
-        res.json({
-            totalTeams,
-            totalParticipants,
-            totalProblemStatements: totalPS,
-            maxTeams: parseInt(settingsObj.max_teams) || 50,
-            registrationOpen: settingsObj.registration_open === '1'
+        const stats = await supabaseData.getPublicStats();
+        res.json(stats || {
+            totalTeams: 0,
+            totalParticipants: 0,
+            totalProblemStatements: 0,
+            maxTeams: 60,
+            registrationOpen: true
         });
     } catch (err) {
-        console.error('Error fetching stats:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('Error fetching stats from Supabase:', err);
+        res.status(500).json({ error: 'Server error loading stats.' });
     }
 });
 
@@ -128,7 +92,6 @@ router.post('/register', async (req, res) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const phoneRegex = /^\+?[\d\s\-]{10,15}$/;
 
-        // Validate each member
         for (let i = 0; i < members.length; i++) {
             const m = members[i];
             if (!m || typeof m !== 'object') {
@@ -154,148 +117,38 @@ router.post('/register', async (req, res) => {
             }
         }
 
-        // Check for duplicate emails within team
         const emails = members.map(m => m.email.trim().toLowerCase());
         const uniqueEmails = [...new Set(emails)];
         if (uniqueEmails.length !== emails.length) {
             return res.status(400).json({ error: 'Duplicate email addresses in team members list.' });
         }
 
-        // Leader designation (first member by default if none explicitly marked)
         const leader = members.find(m => m.is_leader) || members[0];
         const defaultPassword = 'Syanp2K26';
         const hashedPassword = bcrypt.hashSync(defaultPassword, 10);
 
-        // Supabase-first registration when configured
-        if (isSupabaseConfigured()) {
-            const eligibility = await supabaseData.checkRegistrationEligibility(team_name, emails);
-            if (!eligibility.ok) {
-                return res.status(400).json({ error: eligibility.error });
-            }
-
-            const supaResult = await supabaseData.registerTeamInSupabase({
-                team_name,
-                problem_statement_id: problem_statement_id || null,
-                members,
-                leaderEmail: leader.email,
-                hashedPassword
-            });
-
-            // Mirror into SQLite cache if available
-            try {
-                const db = getDb();
-                db.prepare(`
-                    INSERT OR REPLACE INTO teams (id, team_code, team_name, team_lead_email, team_size, password, problem_statement_id, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'registered')
-                `).run(supaResult.teamId, supaResult.teamCode, supaResult.teamName, leader.email.trim(), members.length, hashedPassword, problem_statement_id || null);
-
-                for (const m of members) {
-                    db.prepare(`
-                        INSERT OR REPLACE INTO team_members (team_id, name, email, phone, year, department, college, is_leader)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    `).run(
-                        supaResult.teamId,
-                        m.name.trim(),
-                        m.email.trim(),
-                        m.phone.trim(),
-                        m.year.trim(),
-                        m.department.trim(),
-                        m.college.trim(),
-                        m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
-                    );
-                }
-            } catch (cacheErr) {
-                // SQLite cache write is non-fatal in serverless environments
-            }
-
-            return res.status(201).json({
-                message: 'Team registered successfully!',
-                teamId: supaResult.teamId,
-                teamCode: supaResult.teamCode,
-                teamName: supaResult.teamName,
-                defaultPassword: defaultPassword
-            });
+        const eligibility = await supabaseData.checkRegistrationEligibility(team_name, emails);
+        if (!eligibility.ok) {
+            return res.status(400).json({ error: eligibility.error });
         }
 
-        // Fallback to local SQLite if Supabase not configured
-        const db = getDb();
-        const regOpen = db.prepare("SELECT value FROM event_settings WHERE key = 'registration_open'").get();
-        if (!regOpen || regOpen.value !== '1') {
-            return res.status(400).json({ error: 'Registration is currently closed.' });
-        }
-
-        const maxTeams = db.prepare("SELECT value FROM event_settings WHERE key = 'max_teams'").get();
-        const currentTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
-        if (maxTeams && currentTeams >= parseInt(maxTeams.value)) {
-            return res.status(400).json({ error: 'Maximum number of teams reached. Registration is full.' });
-        }
-
-        // Check if any member email is already registered in DB
-        const checkEmail = db.prepare('SELECT COUNT(*) as count FROM team_members WHERE LOWER(email) = ?');
-        for (const email of emails) {
-            if (checkEmail.get(email).count > 0) {
-                return res.status(400).json({ error: `Email ${email} is already registered with another team.` });
-            }
-        }
-
-        // Check duplicate team name
-        const checkTeamName = db.prepare('SELECT COUNT(*) as count FROM teams WHERE LOWER(team_name) = ?').get(team_name.trim().toLowerCase());
-        if (checkTeamName.count > 0) {
-            return res.status(400).json({ error: 'Team name already taken. Please choose a different name.' });
-        }
-
-        const insertTeam = db.prepare(`
-            INSERT INTO teams (team_code, team_name, team_lead_email, team_size, password, problem_statement_id, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'registered')
-        `);
-
-        const insertMember = db.prepare(`
-            INSERT INTO team_members (team_id, name, email, phone, year, department, college, is_leader)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const registerTransaction = db.transaction(() => {
-            const maxIdRow = db.prepare('SELECT MAX(id) as maxId FROM teams').get();
-            const nextNum = (maxIdRow && maxIdRow.maxId ? maxIdRow.maxId : 0) + 1;
-            const code = 'SYN' + String(nextNum).padStart(3, '0');
-
-            const teamResult = insertTeam.run(
-                code,
-                team_name.trim(),
-                leader.email.trim(),
-                members.length,
-                hashedPassword,
-                problem_statement_id || null
-            );
-            const teamId = teamResult.lastInsertRowid;
-
-            for (const m of members) {
-                insertMember.run(
-                    teamId,
-                    m.name.trim(),
-                    m.email.trim(),
-                    m.phone.trim(),
-                    m.year.trim(),
-                    m.department.trim(),
-                    m.college.trim(),
-                    m.email.trim().toLowerCase() === leader.email.trim().toLowerCase() ? 1 : 0
-                );
-            }
-
-            return { teamId, teamCode: code };
+        const supaResult = await supabaseData.registerTeamInSupabase({
+            team_name,
+            problem_statement_id: problem_statement_id || null,
+            members,
+            leaderEmail: leader.email,
+            hashedPassword
         });
 
-        const { teamId, teamCode } = registerTransaction();
-
-        res.status(201).json({
-            message: 'Team registered successfully!',
-            teamId: teamId,
-            teamCode: teamCode,
-            teamName: team_name.trim(),
+        return res.status(201).json({
+            message: 'Team registered successfully in Supabase!',
+            teamId: supaResult.teamId,
+            teamCode: supaResult.teamCode,
+            teamName: supaResult.teamName,
             defaultPassword: defaultPassword
         });
     } catch (err) {
-        console.error(err);
+        console.error('Registration Error:', err);
         res.status(500).json({ error: 'Server error during registration. Please try again.' });
     }
 });
@@ -307,97 +160,25 @@ router.post('/team/login', async (req, res) => {
         const password = (req.body.password || '').trim();
 
         if (!identifier || !password) {
-            return res.status(400).json({ error: 'Team ID (e.g., SYN001) or Team Lead Email and password are required.' });
+            return res.status(400).json({ error: 'Team ID (e.g., SY01) or Team Lead Email and password are required.' });
         }
 
         const defaultPasswords = ['syanp2k26', 'synap2k26', 'synapse2026', 'synapse', 'synap2026'];
         const isDefaultPassword = defaultPasswords.includes(password.toLowerCase());
 
-        // 1. Supabase-first login check
-        if (isSupabaseConfigured()) {
-            try {
-                const supaTeam = await supabaseData.findTeamForLogin(identifier);
-                if (supaTeam) {
-                    let isValidPassword = false;
-                    if (supaTeam.password && supaTeam.password.startsWith('$2')) {
-                        isValidPassword = bcrypt.compareSync(password, supaTeam.password) || isDefaultPassword;
-                    } else {
-                        isValidPassword = (supaTeam.password === password || isDefaultPassword);
-                        if (isValidPassword) {
-                            const upgradedHash = bcrypt.hashSync(password, 10);
-                            await supabaseData.updateTeamPassword(supaTeam.id, upgradedHash);
-                        }
-                    }
-
-                    if (!isValidPassword) {
-                        return res.status(401).json({ error: 'Invalid password. Please check your credentials.' });
-                    }
-
-                    const token = jwt.sign(
-                        { teamId: supaTeam.id, teamCode: supaTeam.team_code, teamName: supaTeam.team_name, role: 'team' },
-                        process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
-                        { expiresIn: '48h' }
-                    );
-
-                    return res.json({
-                        token,
-                        team: {
-                            id: supaTeam.id,
-                            team_code: supaTeam.team_code,
-                            team_name: supaTeam.team_name,
-                            status: supaTeam.status
-                        }
-                    });
-                }
-            } catch (supaErr) {
-                console.warn('⚠️ Supabase login lookup notice:', supaErr.message);
-            }
-        }
-
-        // 2. Fallback to local SQLite if Supabase not configured or team not in cloud
-        const db = getDb();
-        const trimmed = identifier.trim();
-        let normalizedCode = trimmed.toUpperCase().replace(/[\s-_]/g, '');
-        const synMatch = normalizedCode.match(/^SYN(\d+)$/);
-        if (synMatch) {
-            normalizedCode = 'SYN' + synMatch[1].padStart(3, '0');
-        }
-        const syMatch = normalizedCode.match(/^SY(\d+)$/);
-        if (syMatch) {
-            normalizedCode = 'SY' + syMatch[1].padStart(2, '0');
-        }
-        const pureNum = normalizedCode.match(/^(\d{1,2})$/);
-        const altCodeSY = pureNum ? ('SY' + pureNum[1].padStart(2, '0')) : normalizedCode;
-
-        const upperIdentifier = trimmed.toUpperCase();
-        const lowerIdentifier = trimmed.toLowerCase();
-        const regEmail = /^\d{6,16}$/.test(trimmed) ? `${trimmed}@vsb.ac.in`.toLowerCase() : lowerIdentifier;
-
-        const team = db.prepare(`
-            SELECT * FROM teams 
-            WHERE UPPER(team_code) = ? 
-               OR UPPER(team_code) = ? 
-               OR UPPER(team_code) = ?
-               OR LOWER(team_name) = ? 
-               OR LOWER(team_lead_email) = ? 
-               OR LOWER(team_lead_email) = ?
-               OR id IN (SELECT team_id FROM team_members WHERE LOWER(email) = ?)
-        `).get(upperIdentifier, normalizedCode, altCodeSY, lowerIdentifier, lowerIdentifier, regEmail, lowerIdentifier);
-
-        if (!team) {
+        const supaTeam = await supabaseData.findTeamForLogin(identifier);
+        if (!supaTeam) {
             return res.status(401).json({ error: 'Team not found. Please verify your Team ID or Lead Email.' });
         }
 
         let isValidPassword = false;
-        if (team.password && team.password.startsWith('$2')) {
-            isValidPassword = bcrypt.compareSync(password, team.password) || isDefaultPassword;
+        if (supaTeam.password && supaTeam.password.startsWith('$2')) {
+            isValidPassword = bcrypt.compareSync(password, supaTeam.password) || isDefaultPassword;
         } else {
-            isValidPassword = (team.password === password || isDefaultPassword);
+            isValidPassword = (supaTeam.password === password || isDefaultPassword);
             if (isValidPassword) {
                 const upgradedHash = bcrypt.hashSync(password, 10);
-                try {
-                    db.prepare('UPDATE teams SET password = ? WHERE id = ?').run(upgradedHash, team.id);
-                } catch (e) {}
+                await supabaseData.updateTeamPassword(supaTeam.id, upgradedHash);
             }
         }
 
@@ -406,22 +187,22 @@ router.post('/team/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-            { teamId: team.id, teamCode: team.team_code, teamName: team.team_name, role: 'team' },
+            { teamId: supaTeam.id, teamCode: supaTeam.team_code, teamName: supaTeam.team_name, role: 'team' },
             process.env.JWT_SECRET || 'synapse_hackathon_2026_vsb_secret_key',
             { expiresIn: '48h' }
         );
 
-        res.json({
+        return res.json({
             token,
             team: {
-                id: team.id,
-                team_code: team.team_code,
-                team_name: team.team_name,
-                status: team.status
+                id: supaTeam.id,
+                team_code: supaTeam.team_code,
+                team_name: supaTeam.team_name,
+                status: supaTeam.status
             }
         });
     } catch (err) {
-        console.error('Error during team login:', err);
+        console.error('Error during team login in Supabase:', err);
         res.status(500).json({ error: 'Server error during team login.' });
     }
 });
@@ -429,92 +210,13 @@ router.post('/team/login', async (req, res) => {
 // ====== Team Leader Dashboard Data ======
 router.get('/team/dashboard', authenticateTeamToken, async (req, res) => {
     try {
-        // Supabase-first dashboard data
-        if (isSupabaseConfigured()) {
-            try {
-                const dashData = await supabaseData.getTeamDashboardData(req.team.teamId);
-                if (dashData) return res.json(dashData);
-            } catch (supaErr) {
-                console.warn('⚠️ Supabase dashboard fetch notice:', supaErr.message);
-            }
-        }
-
-        // Fallback to SQLite
-        const db = getDb();
-        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(req.team.teamId);
-
-        if (!team) {
+        const dashData = await supabaseData.getTeamDashboardData(req.team.teamId);
+        if (!dashData) {
             return res.status(404).json({ error: 'Team not found.' });
         }
-
-        const members = db.prepare('SELECT * FROM team_members WHERE team_id = ? ORDER BY is_leader DESC, id ASC').all(team.id);
-
-        let problemStatement = null;
-        if (team.status === 'checked_in') {
-            if (!team.problem_statement_id) {
-                const activePS = db.prepare(`
-                    SELECT ps.id, COUNT(t.id) as team_count
-                    FROM problem_statements ps
-                    LEFT JOIN teams t ON t.problem_statement_id = ps.id AND t.status = 'checked_in'
-                    WHERE ps.is_active = 1
-                    GROUP BY ps.id
-                    ORDER BY team_count ASC
-                `).all();
-
-                if (activePS.length > 0) {
-                    const minCount = activePS[0].team_count;
-                    const pool = activePS.filter(p => p.team_count === minCount);
-                    const chosen = pool[Math.floor(Math.random() * pool.length)] || activePS[0];
-                    const checkinTime = team.checked_in_at || new Date().toISOString();
-                    db.prepare("UPDATE teams SET problem_statement_id = ?, checked_in_at = ? WHERE id = ?")
-                        .run(chosen.id, checkinTime, team.id);
-                    team.problem_statement_id = chosen.id;
-                    team.checked_in_at = checkinTime;
-                }
-            }
-
-            if (team.problem_statement_id) {
-                problemStatement = db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(team.problem_statement_id);
-            }
-        }
-
-        const announcements = db.prepare('SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC LIMIT 10').all();
-        const schedule = db.prepare('SELECT * FROM schedule WHERE is_active = 1 ORDER BY start_time ASC').all();
-        const settingsRows = db.prepare('SELECT * FROM event_settings').all();
-        const settings = {};
-        settingsRows.forEach(s => { settings[s.key] = s.value; });
-
-        const totalTeams = db.prepare('SELECT COUNT(*) as count FROM teams').get().count;
-        const checkedInTeams = db.prepare("SELECT COUNT(*) as count FROM teams WHERE status = 'checked_in'").get().count;
-
-        res.json({
-            team: {
-                id: team.id,
-                team_code: team.team_code,
-                team_name: team.team_name,
-                team_lead_email: team.team_lead_email,
-                team_size: team.team_size,
-                status: team.status,
-                registered_at: team.registered_at,
-                checked_in_at: team.checked_in_at,
-                project_repo: team.project_repo,
-                project_demo: team.project_demo,
-                submission_notes: team.submission_notes,
-                submission_file_url: team.submission_file_url
-            },
-            members,
-            problem_statement: problemStatement,
-            isCheckedIn: team.status === 'checked_in',
-            announcements,
-            schedule,
-            settings,
-            event_stats: {
-                totalTeams,
-                checkedInTeams
-            }
-        });
+        res.json(dashData);
     } catch (err) {
-        console.error(err);
+        console.error('Error loading dashboard from Supabase:', err);
         res.status(500).json({ error: 'Server error loading team dashboard.' });
     }
 });
@@ -523,70 +225,25 @@ router.get('/team/dashboard', authenticateTeamToken, async (req, res) => {
 router.post('/team/reveal-ps', authenticateTeamToken, async (req, res) => {
     try {
         const teamId = req.team.teamId;
+        const result = await supabaseData.revealTeamProblemStatement(teamId);
 
-        // 1. Supabase-first
-        if (isSupabaseConfigured()) {
-            try {
-                const result = await supabaseData.revealTeamProblemStatement(teamId);
-                if (result) {
-                    // Mirror status & check-in to local SQLite
-                    try {
-                        const db = getDb();
-                        db.prepare("UPDATE teams SET status = 'checked_in', checked_in_at = COALESCE(checked_in_at, datetime('now')) WHERE id = ?").run(teamId);
-                    } catch (e) {}
-
-                    return res.json({
-                        success: true,
-                        isCheckedIn: true,
-                        problem_statement: result.problemStatement,
-                        team: result.team
-                    });
-                }
-            } catch (supaErr) {
-                console.warn('⚠️ Supabase reveal-ps notice:', supaErr.message);
-            }
+        if (!result) {
+            return res.status(404).json({ error: 'Team or problem statement not found in Supabase.' });
         }
-
-        // 2. SQLite Fallback
-        const db = getDb();
-        const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId);
-        if (!team) {
-            return res.status(404).json({ error: 'Team not found.' });
-        }
-
-        let psId = team.problem_statement_id;
-        if (!psId) {
-            const activePS = db.prepare('SELECT id FROM problem_statements WHERE is_active = 1').all();
-            if (activePS.length > 0) {
-                psId = activePS[Math.floor(Math.random() * activePS.length)].id;
-            }
-        }
-
-        const now = new Date().toISOString();
-        const checkedInTime = team.checked_in_at || now;
-        db.prepare("UPDATE teams SET status = 'checked_in', checked_in_at = ?, problem_statement_id = ? WHERE id = ?")
-            .run(checkedInTime, psId, teamId);
-
-        const ps = psId ? db.prepare('SELECT * FROM problem_statements WHERE id = ?').get(psId) : null;
 
         return res.json({
             success: true,
             isCheckedIn: true,
-            problem_statement: ps,
-            team: {
-                ...team,
-                status: 'checked_in',
-                checked_in_at: checkedInTime,
-                problem_statement_id: psId
-            }
+            problem_statement: result.problemStatement,
+            team: result.team
         });
     } catch (err) {
-        console.error('Error revealing problem statement:', err);
+        console.error('Error revealing problem statement in Supabase:', err);
         res.status(500).json({ error: 'Server error revealing problem statement.' });
     }
 });
 
-// ====== Team File Upload (Supabase Storage with local fallback) ======
+// ====== Team File Upload (Supabase Storage Exclusively) ======
 router.post('/team/upload', authenticateTeamToken, upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -596,56 +253,26 @@ router.post('/team/upload', authenticateTeamToken, upload.single('file'), async 
         const originalName = req.file.originalname;
         const mimeType = req.file.mimetype || 'application/octet-stream';
         const buffer = req.file.buffer;
-        let fileUrl = '';
-        let storageProvider = 'local';
 
-        // 1. Try uploading to Supabase Storage if configured
-        if (isSupabaseConfigured()) {
-            try {
-                const uploadResult = await uploadToSupabaseStorage(buffer, originalName, mimeType);
-                if (uploadResult && uploadResult.publicUrl) {
-                    fileUrl = uploadResult.publicUrl;
-                    storageProvider = 'supabase';
-                }
-            } catch (supaErr) {
-                console.error('⚠️ Supabase storage upload failed, falling back to local storage:', supaErr.message);
-            }
+        const uploadResult = await uploadToSupabaseStorage(buffer, originalName, mimeType);
+        if (!uploadResult || !uploadResult.publicUrl) {
+            throw new Error('Supabase Storage did not return a public file URL.');
         }
 
-        // 2. Local fallback if Supabase not configured or encountered error
-        if (!fileUrl) {
-            const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            const safeName = `${Date.now()}_${originalName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-            const targetPath = path.join(uploadDir, safeName);
-            fs.writeFileSync(targetPath, buffer);
-            fileUrl = `/uploads/${safeName}`;
-            storageProvider = 'local';
-        }
+        const fileUrl = uploadResult.publicUrl;
 
-        // Update database for the team
-        const db = getDb();
-        db.prepare('UPDATE teams SET submission_file_url = ? WHERE id = ?').run(fileUrl, req.team.teamId);
-
-        // Sync to Supabase DB if configured
-        if (isSupabaseConfigured()) {
-            try {
-                const supabase = getSupabase();
-                if (supabase) {
-                    await supabase.from('teams').update({ submission_file_url: fileUrl }).eq('id', req.team.teamId);
-                }
-            } catch (supaSyncErr) {
-                console.warn('⚠️ Supabase DB update failed for upload:', supaSyncErr.message);
-            }
-        }
+        // Update team in Supabase
+        const supabase = getSupabase();
+        await supabase
+            .from('teams')
+            .update({ submission_file_url: fileUrl })
+            .eq('id', req.team.teamId);
 
         res.json({
-            message: `File successfully uploaded to ${storageProvider === 'supabase' ? 'Supabase Storage' : 'local storage'}!`,
+            message: 'File successfully uploaded to Supabase Storage!',
             fileUrl,
             fileName: originalName,
-            storage: storageProvider
+            storage: 'supabase'
         });
     } catch (err) {
         console.error('Upload Error:', err);
@@ -658,7 +285,6 @@ router.post('/team/submit', authenticateTeamToken, async (req, res) => {
     try {
         let { project_repo, project_demo, submission_notes, submission_file_url } = req.body;
         
-        // Enforce length caps (Issue #21)
         if (project_repo && typeof project_repo === 'string') {
             project_repo = project_repo.trim();
             if (project_repo.length > 300) return res.status(400).json({ error: 'Repository link is too long (max 300 chars).' });
@@ -687,41 +313,21 @@ router.post('/team/submit', authenticateTeamToken, async (req, res) => {
             submission_file_url = null;
         }
 
-        // 1. Supabase-first submission persistence
-        if (isSupabaseConfigured()) {
-            try {
-                await supabaseData.updateTeamSubmission(req.team.teamId, {
-                    project_repo,
-                    project_demo,
-                    submission_notes,
-                    submission_file_url
-                });
-            } catch (supaErr) {
-                console.error('❌ Supabase submission update error:', supaErr.message);
-                throw supaErr;
-            }
-        }
+        await supabaseData.updateTeamSubmission(req.team.teamId, {
+            project_repo,
+            project_demo,
+            submission_notes,
+            submission_file_url
+        });
 
-        // 2. Mirror into SQLite cache if available
-        try {
-            const db = getDb();
-            db.prepare(`
-                UPDATE teams 
-                SET project_repo = ?, project_demo = ?, submission_notes = ?, submission_file_url = COALESCE(?, submission_file_url)
-                WHERE id = ?
-            `).run(project_repo, project_demo, submission_notes, submission_file_url, req.team.teamId);
-        } catch (dbErr) {
-            // Local SQLite cache write is non-fatal
-        }
-
-        res.json({ message: 'Project submission updated successfully!' });
+        res.json({ message: 'Project submission updated successfully in Supabase!' });
     } catch (err) {
-        console.error(err);
+        console.error('Supabase submission update error:', err);
         res.status(500).json({ error: 'Server error saving submission.' });
     }
 });
 
-// ====== Storage Status (Supabase status check) ======
+// ====== Storage Status ======
 router.get('/storage/status', (req, res) => {
     res.json({
         supabaseConfigured: isSupabaseConfigured(),
