@@ -192,18 +192,83 @@ router.post('/team/login', async (req, res) => {
             { expiresIn: '48h' }
         );
 
+        const existingMembers = await supabaseData.getTeamMembers(supaTeam.id);
+
         return res.json({
             token,
             team: {
                 id: supaTeam.id,
                 team_code: supaTeam.team_code,
                 team_name: supaTeam.team_name,
+                team_lead_email: supaTeam.team_lead_email,
+                team_size: supaTeam.team_size,
                 status: supaTeam.status
-            }
+            },
+            members: existingMembers || []
         });
     } catch (err) {
         console.error('Error during team login in Supabase:', err);
         res.status(500).json({ error: 'Server error during team login.' });
+    }
+});
+
+// ====== Update Team Leader & Teammates Details (Supabase) ======
+router.post('/team/members', authenticateTeamToken, async (req, res) => {
+    try {
+        const teamId = req.team.teamId;
+        const { leader, teammates } = req.body;
+
+        if (!leader || typeof leader !== 'object') {
+            return res.status(400).json({ error: 'Team Leader details are required.' });
+        }
+
+        if (!leader.name || !leader.name.trim()) {
+            return res.status(400).json({ error: 'Team Leader Name is required.' });
+        }
+        if (!leader.department || !leader.department.trim()) {
+            return res.status(400).json({ error: 'Team Leader Department is required.' });
+        }
+        if (!leader.section || !leader.section.trim()) {
+            return res.status(400).json({ error: 'Team Leader Section is required.' });
+        }
+        if (!leader.phone || !leader.phone.trim()) {
+            return res.status(400).json({ error: 'Team Leader Contact Number is required.' });
+        }
+        if (!leader.email || !leader.email.trim()) {
+            return res.status(400).json({ error: 'Team Leader Email ID is required.' });
+        }
+
+        const validTeammates = Array.isArray(teammates) ? teammates : [];
+        for (let i = 0; i < validTeammates.length; i++) {
+            const tm = validTeammates[i];
+            const num = i + 1;
+            if (!tm.name || !tm.name.trim()) {
+                return res.status(400).json({ error: `Teammate #${num}: Name is required.` });
+            }
+            if (!tm.department || !tm.department.trim()) {
+                return res.status(400).json({ error: `Teammate #${num}: Department is required.` });
+            }
+            if (!tm.section || !tm.section.trim()) {
+                return res.status(400).json({ error: `Teammate #${num}: Section is required.` });
+            }
+            if (!tm.phone || !tm.phone.trim()) {
+                return res.status(400).json({ error: `Teammate #${num}: Contact Number is required.` });
+            }
+            if (!tm.email || !tm.email.trim()) {
+                return res.status(400).json({ error: `Teammate #${num}: Email ID is required.` });
+            }
+        }
+
+        const updatedMembers = await supabaseData.updateTeamMembersInSupabase(teamId, leader, validTeammates);
+
+        res.json({
+            success: true,
+            message: 'Team leader and teammate details successfully stored in Supabase!',
+            members: updatedMembers
+        });
+    } catch (err) {
+        console.error('Error saving team members in Supabase:', err);
+        res.status(500).json({ error: err.message || 'Server error updating team members.' });
     }
 });
 

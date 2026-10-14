@@ -1128,8 +1128,8 @@ async function handleTeamLogin(e) {
 
         localStorage.setItem('synapse_team_token', data.token);
         localStorage.setItem('synapse_team_info', JSON.stringify(data.team));
-        showToast('Signed in successfully!', 'success');
-        loadTeamDashboard();
+        showToast('Signed in successfully! Please confirm team details.', 'success');
+        showTeamVerificationModal(data.team, data.members || []);
     } catch (err) {
         showToast(err.message, 'error');
     } finally {
@@ -1153,9 +1153,386 @@ async function quickLoginTeam(code, password) {
 
         localStorage.setItem('synapse_team_token', data.token);
         localStorage.setItem('synapse_team_info', JSON.stringify(data.team));
-        loadTeamDashboard();
+        showTeamVerificationModal(data.team, data.members || []);
     } catch (err) {
         renderTeamLoginForm(code);
+    }
+}
+
+let cachedVerificationMembers = [];
+let cachedVerificationTeam = null;
+
+function showTeamVerificationModal(team, members = []) {
+    cachedVerificationTeam = team;
+    cachedVerificationMembers = members || [];
+
+    const titleEl = document.getElementById('teamPortalTitle');
+    const bodyEl = document.getElementById('teamPortalBody');
+    if (!titleEl || !bodyEl) return;
+
+    titleEl.innerHTML = `<i class="fas fa-users-cog"></i> Team Verification & Member Details`;
+
+    const leaderMember = cachedVerificationMembers.find(m => m.is_leader) || cachedVerificationMembers[0] || {};
+    const teammateMembers = cachedVerificationMembers.filter(m => !m.is_leader && m !== leaderMember);
+
+    const parseSec = (deptStr, defaultSec = 'A') => {
+        if (!deptStr) return defaultSec;
+        const match = deptStr.match(/sec(?:tion)?\s*([a-zA-Z0-9]+)/i);
+        return match ? match[1].toUpperCase() : defaultSec;
+    };
+
+    const cleanDept = (deptStr) => {
+        if (!deptStr) return 'Artificial Intelligence & Data Science (AI & DS)';
+        return deptStr.replace(/\s*\([^)]*sec[^)]*\)/i, '').replace(/\s*-\s*sec.*$/i, '').trim();
+    };
+
+    const leaderName = leaderMember.name || '';
+    const leaderDept = cleanDept(leaderMember.department);
+    const leaderSec = leaderMember.section || parseSec(leaderMember.department, 'A');
+    const leaderPhone = (leaderMember.phone && leaderMember.phone !== 'N/A') ? leaderMember.phone : '';
+    const leaderEmail = (leaderMember.email && !leaderMember.email.includes('@synapse.vsb.edu.in')) ? leaderMember.email : (team.team_lead_email || '');
+
+    const initialTeammateCount = teammateMembers.length > 0 
+        ? Math.min(Math.max(teammateMembers.length, 1), 3) 
+        : 2;
+
+    const deptOptions = [
+        'Artificial Intelligence & Data Science (AI & DS)',
+        'Artificial Intelligence & Machine Learning (AIML)',
+        'Computer Science & Engineering (CSE)',
+        'Information Technology (IT)',
+        'Electronics & Communication Engineering (ECE)',
+        'Electrical & Electronics Engineering (EEE)',
+        'Mechanical Engineering (MECH)',
+        'Civil Engineering (CIVIL)',
+        'Other'
+    ];
+
+    const secOptions = ['A', 'B', 'C', 'D', 'E', 'Other'];
+
+    bodyEl.innerHTML = `
+        <div style="max-width: 720px; margin: 0 auto;">
+            <!-- Team Info Header Banner -->
+            <div style="background: linear-gradient(135deg, rgba(108,92,231,0.2) 0%, rgba(0,206,201,0.15) 100%); border: 1px solid rgba(108,92,231,0.35); border-radius: 12px; padding: 1.1rem 1.4rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.25rem;">
+                        <span class="badge" style="background: rgba(0,206,201,0.2); color: var(--accent-cyan); font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; padding: 0.2rem 0.6rem; border-radius: 6px; border: 1px solid rgba(0,206,201,0.4);">
+                            <i class="fas fa-id-badge"></i> ${escapeHtml(team.team_code)}
+                        </span>
+                        <h4 style="margin: 0; color: #fff; font-size: 1.15rem;">${escapeHtml(team.team_name)}</h4>
+                    </div>
+                    <span style="font-size: 0.82rem; color: var(--text-secondary);">
+                        <i class="fas fa-info-circle" style="color: var(--accent-cyan);"></i> Please verify details for the <strong>Team Leader</strong> and all <strong>Teammates</strong>.
+                    </span>
+                </div>
+                <div style="font-size: 0.8rem; background: rgba(108,92,231,0.2); color: #a29bfe; padding: 0.35rem 0.75rem; border-radius: 20px; border: 1px solid rgba(108,92,231,0.3); font-weight: 600;">
+                    <i class="fas fa-database"></i> Live Supabase Cloud
+                </div>
+            </div>
+
+            <form onsubmit="handleSaveTeamMembers(event)" id="teamMembersForm">
+                <!-- PART 1: TEAM LEADER DETAILS -->
+                <div style="background: radial-gradient(circle at top right, rgba(253, 203, 110, 0.12), rgba(20, 20, 35, 0.75)); border: 1px solid rgba(253, 203, 110, 0.4); border-radius: 12px; padding: 1.25rem 1.4rem; margin-bottom: 1.5rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(253, 203, 110, 0.2); padding-bottom: 0.6rem;">
+                        <h5 style="margin: 0; color: #fdcb6e; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-display);">
+                            <i class="fas fa-crown"></i> Team Leader Details
+                        </h5>
+                        <span style="background: rgba(253, 203, 110, 0.18); color: #fdcb6e; padding: 0.2rem 0.65rem; border-radius: 20px; font-size: 0.78rem; font-weight: 700; border: 1px solid rgba(253, 203, 110, 0.3);">
+                            Leader
+                        </span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.9rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                                <i class="fas fa-user"></i> Team Leader Name <span style="color: var(--accent-red);">*</span>
+                            </label>
+                            <input type="text" id="leader_name" value="${escapeHtml(leaderName)}" placeholder="Leader Full Name" required
+                                   style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                                <i class="fas fa-graduation-cap"></i> Leader Department <span style="color: var(--accent-red);">*</span>
+                            </label>
+                            <input list="leaderDeptList" id="leader_dept" value="${escapeHtml(leaderDept)}" placeholder="Select or type department" required
+                                   style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                            <datalist id="leaderDeptList">
+                                ${deptOptions.map(opt => `<option value="${opt}">`).join('')}
+                            </datalist>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                                <i class="fas fa-layer-group"></i> Section <span style="color: var(--accent-red);">*</span>
+                            </label>
+                            <select id="leader_sec" required
+                                    style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.9); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                                ${secOptions.map(s => `<option value="${s}" ${leaderSec === s ? 'selected' : ''}>Section ${s}</option>`).join('')}
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                                <i class="fas fa-phone"></i> Contact Number <span style="color: var(--accent-red);">*</span>
+                            </label>
+                            <input type="tel" id="leader_phone" value="${escapeHtml(leaderPhone)}" placeholder="10-digit mobile number" required pattern="[0-9]{10,12}"
+                                   style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0; grid-column: 1 / -1;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.35rem;">
+                                <i class="fas fa-envelope"></i> Mail ID <span style="color: var(--accent-red);">*</span>
+                            </label>
+                            <input type="email" id="leader_email" value="${escapeHtml(leaderEmail)}" placeholder="e.g. leader@vsb.ac.in" required
+                                   style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PART 2: TEAMMATE COUNT DROPDOWN -->
+                <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(0,206,201,0.35); border-radius: 12px; padding: 1.1rem 1.4rem; margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                        <div>
+                            <label for="teammateCountSelect" style="display: block; font-weight: 700; color: #fff; font-size: 0.95rem; margin-bottom: 0.2rem;">
+                                <i class="fas fa-user-friends" style="color: var(--accent-cyan);"></i> Count of Teammates (Excluding Leader)
+                            </label>
+                            <span style="font-size: 0.82rem; color: var(--text-muted);">
+                                Select how many other teammates to enter (excluding the Team Leader):
+                            </span>
+                        </div>
+                        <select id="teammateCountSelect" onchange="handleTeammateCountChange(parseInt(this.value, 10))"
+                                style="padding: 0.6rem 1.2rem; border-radius: 8px; background: rgba(10,10,20,0.9); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); font-weight: 700; font-size: 0.95rem; cursor: pointer;">
+                            <option value="1" ${initialTeammateCount === 1 ? 'selected' : ''}>1 Teammate (Team of 2)</option>
+                            <option value="2" ${initialTeammateCount === 2 ? 'selected' : ''}>2 Teammates (Team of 3)</option>
+                            <option value="3" ${initialTeammateCount === 3 ? 'selected' : ''}>3 Teammates (Team of 4)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- PART 3: DYNAMIC TEAMMATES LIST -->
+                <div id="teammatesInputsContainer"></div>
+
+                <!-- PART 4: SUBMIT ACTIONS -->
+                <div style="display: flex; gap: 0.85rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-primary btn-lg" style="flex: 1; justify-content: center; min-width: 240px;" id="saveMembersSubmitBtn">
+                        <i class="fas fa-save"></i> Save Details to Supabase & Open Dashboard
+                    </button>
+                    <button type="button" class="btn btn-outline" onclick="loadTeamDashboard()" style="padding: 0.75rem 1.25rem;">
+                        <i class="fas fa-columns"></i> Skip to Dashboard
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    handleTeammateCountChange(initialTeammateCount, teammateMembers);
+}
+
+function handleTeammateCountChange(count, prefillList = null) {
+    const container = document.getElementById('teammatesInputsContainer');
+    if (!container) return;
+
+    const existingValues = [];
+    if (!prefillList) {
+        for (let i = 0; i < 3; i++) {
+            const nameEl = document.getElementById(`teammate_${i}_name`);
+            const deptEl = document.getElementById(`teammate_${i}_dept`);
+            const secEl = document.getElementById(`teammate_${i}_sec`);
+            const phoneEl = document.getElementById(`teammate_${i}_phone`);
+            const emailEl = document.getElementById(`teammate_${i}_email`);
+            if (nameEl) {
+                existingValues.push({
+                    name: nameEl.value,
+                    department: deptEl ? deptEl.value : '',
+                    section: secEl ? secEl.value : 'A',
+                    phone: phoneEl ? phoneEl.value : '',
+                    email: emailEl ? emailEl.value : ''
+                });
+            }
+        }
+    }
+
+    const dataList = prefillList || existingValues || [];
+
+    const deptOptions = [
+        'Artificial Intelligence & Data Science (AI & DS)',
+        'Artificial Intelligence & Machine Learning (AIML)',
+        'Computer Science & Engineering (CSE)',
+        'Information Technology (IT)',
+        'Electronics & Communication Engineering (ECE)',
+        'Electrical & Electronics Engineering (EEE)',
+        'Mechanical Engineering (MECH)',
+        'Civil Engineering (CIVIL)',
+        'Other'
+    ];
+    const secOptions = ['A', 'B', 'C', 'D', 'E', 'Other'];
+
+    const parseSec = (deptStr, defaultSec = 'A') => {
+        if (!deptStr) return defaultSec;
+        const match = deptStr.match(/sec(?:tion)?\s*([a-zA-Z0-9]+)/i);
+        return match ? match[1].toUpperCase() : defaultSec;
+    };
+
+    const cleanDept = (deptStr) => {
+        if (!deptStr) return 'Artificial Intelligence & Data Science (AI & DS)';
+        return deptStr.replace(/\s*\([^)]*sec[^)]*\)/i, '').replace(/\s*-\s*sec.*$/i, '').trim();
+    };
+
+    let html = '';
+    for (let i = 0; i < count; i++) {
+        const item = dataList[i] || {};
+        const tmName = item.name || '';
+        const tmDept = cleanDept(item.department);
+        const tmSec = item.section || parseSec(item.department, 'A');
+        const tmPhone = (item.phone && item.phone !== 'N/A') ? item.phone : '';
+        const tmEmail = (item.email && !item.email.includes('.m') && !item.email.includes('@synapse.vsb.edu.in')) ? item.email : '';
+
+        html += `
+            <div style="background: rgba(18, 18, 30, 0.7); border: 1px solid rgba(0, 206, 201, 0.3); border-radius: 12px; padding: 1.25rem 1.4rem; margin-bottom: 1.2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.9rem; border-bottom: 1px solid rgba(0, 206, 201, 0.15); padding-bottom: 0.5rem;">
+                    <h5 style="margin: 0; color: var(--accent-cyan); font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-display);">
+                        <i class="fas fa-user"></i> Teammate #${i + 1} Details
+                    </h5>
+                    <span style="background: rgba(0, 206, 201, 0.15); color: var(--accent-cyan); padding: 0.15rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">
+                        Member ${i + 2} of ${count + 1}
+                    </span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.85rem;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem;">
+                            <i class="fas fa-id-card"></i> Teammate Name <span style="color: var(--accent-red);">*</span>
+                        </label>
+                        <input type="text" id="teammate_${i}_name" value="${escapeHtml(tmName)}" placeholder="Teammate Full Name" required
+                               style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem;">
+                            <i class="fas fa-graduation-cap"></i> Department <span style="color: var(--accent-red);">*</span>
+                        </label>
+                        <input list="teammateDeptList_${i}" id="teammate_${i}_dept" value="${escapeHtml(tmDept)}" placeholder="Select or type department" required
+                               style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                        <datalist id="teammateDeptList_${i}">
+                            ${deptOptions.map(opt => `<option value="${opt}">`).join('')}
+                        </datalist>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem;">
+                            <i class="fas fa-layer-group"></i> Section <span style="color: var(--accent-red);">*</span>
+                        </label>
+                        <select id="teammate_${i}_sec" required
+                                style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.9); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                            ${secOptions.map(s => `<option value="${s}" ${tmSec === s ? 'selected' : ''}>Section ${s}</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem;">
+                            <i class="fas fa-phone"></i> Contact Number <span style="color: var(--accent-red);">*</span>
+                        </label>
+                        <input type="tel" id="teammate_${i}_phone" value="${escapeHtml(tmPhone)}" placeholder="10-digit mobile number" required pattern="[0-9]{10,12}"
+                               style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0; grid-column: 1 / -1;">
+                        <label style="display: block; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem;">
+                            <i class="fas fa-envelope"></i> Mail ID <span style="color: var(--accent-red);">*</span>
+                        </label>
+                        <input type="email" id="teammate_${i}_email" value="${escapeHtml(tmEmail)}" placeholder="e.g. teammate@vsb.ac.in" required
+                               style="width: 100%; padding: 0.65rem 0.85rem; border-radius: 8px; background: rgba(10,10,15,0.7); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-size: 0.9rem;">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+async function handleSaveTeamMembers(e) {
+    e.preventDefault();
+    const token = localStorage.getItem('synapse_team_token');
+    if (!token) return renderTeamLoginForm();
+
+    const submitBtn = document.getElementById('saveMembersSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span> Saving to Supabase...';
+
+    try {
+        const leader = {
+            name: document.getElementById('leader_name').value.trim(),
+            department: document.getElementById('leader_dept').value.trim(),
+            section: document.getElementById('leader_sec').value.trim(),
+            phone: document.getElementById('leader_phone').value.trim(),
+            email: document.getElementById('leader_email').value.trim()
+        };
+
+        const countSelect = document.getElementById('teammateCountSelect');
+        const count = parseInt(countSelect ? countSelect.value : '2', 10);
+
+        const teammates = [];
+        for (let i = 0; i < count; i++) {
+            const nameEl = document.getElementById(`teammate_${i}_name`);
+            const deptEl = document.getElementById(`teammate_${i}_dept`);
+            const secEl = document.getElementById(`teammate_${i}_sec`);
+            const phoneEl = document.getElementById(`teammate_${i}_phone`);
+            const emailEl = document.getElementById(`teammate_${i}_email`);
+
+            if (!nameEl || !nameEl.value.trim()) {
+                throw new Error(`Please enter the name for Teammate #${i + 1}`);
+            }
+            if (!deptEl || !deptEl.value.trim()) {
+                throw new Error(`Please enter the department for Teammate #${i + 1}`);
+            }
+            if (!secEl || !secEl.value.trim()) {
+                throw new Error(`Please select the section for Teammate #${i + 1}`);
+            }
+            if (!phoneEl || !phoneEl.value.trim()) {
+                throw new Error(`Please enter the contact number for Teammate #${i + 1}`);
+            }
+            if (!emailEl || !emailEl.value.trim()) {
+                throw new Error(`Please enter the email for Teammate #${i + 1}`);
+            }
+
+            teammates.push({
+                name: nameEl.value.trim(),
+                department: deptEl.value.trim(),
+                section: secEl.value.trim(),
+                phone: phoneEl.value.trim(),
+                email: emailEl.value.trim()
+            });
+        }
+
+        const allEmails = [leader.email.toLowerCase(), ...teammates.map(t => t.email.toLowerCase())];
+        const uniqueEmails = new Set(allEmails);
+        if (uniqueEmails.size !== allEmails.length) {
+            throw new Error('Each team member must have a unique email address.');
+        }
+
+        const res = await fetch(`${API_BASE}/team/members`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ leader, teammates })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save team members');
+
+        showToast('Team members successfully saved to Supabase!', 'success');
+        loadTeamDashboard();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-save"></i> Save Details to Supabase & Open Dashboard';
+        }
     }
 }
 
@@ -1190,7 +1567,10 @@ async function loadTeamDashboard() {
     }
 }
 
+let currentDashboardData = null;
+
 function renderTeamDashboard(data) {
+    currentDashboardData = data;
     const titleEl = document.getElementById('teamPortalTitle');
     const bodyEl = document.getElementById('teamPortalBody');
     const team = data.team;
@@ -1220,6 +1600,36 @@ function renderTeamDashboard(data) {
                 <button class="btn btn-outline btn-sm" onclick="teamLogout()" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
+            </div>
+        </div>
+
+        <!-- Official Team Roster Card -->
+        <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--border-radius); padding: 1.25rem 1.4rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h5 style="margin: 0; color: #fff; font-family: var(--font-display); font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-users" style="color: var(--accent-cyan);"></i> Official Team Roster (${(data.members || []).length} Members)
+                </h5>
+                <button class="btn btn-outline btn-sm" onclick="showTeamVerificationModal(currentDashboardData.team, currentDashboardData.members)" style="font-size: 0.78rem; padding: 0.25rem 0.65rem;">
+                    <i class="fas fa-user-edit"></i> Edit Team Members
+                </button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem;">
+                ${(data.members || []).map(m => `
+                    <div style="background: rgba(10,10,20,0.6); border: 1px solid ${m.is_leader ? 'rgba(253,203,110,0.4)' : 'rgba(0,206,201,0.25)'}; border-radius: 8px; padding: 0.85rem 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                            <strong style="color: #fff; font-size: 0.95rem;">${escapeHtml(m.name)}</strong>
+                            <span style="font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 12px; font-weight: 700; background: ${m.is_leader ? 'rgba(253,203,110,0.2)' : 'rgba(0,206,201,0.15)'}; color: ${m.is_leader ? '#fdcb6e' : 'var(--accent-cyan)'};">
+                                ${m.is_leader ? '<i class="fas fa-crown"></i> Leader' : '<i class="fas fa-user"></i> Teammate'}
+                            </span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.25rem;">
+                            <div><i class="fas fa-graduation-cap" style="width: 16px; color: var(--text-muted);"></i> ${escapeHtml(m.department)}</div>
+                            <div><i class="fas fa-phone" style="width: 16px; color: var(--text-muted);"></i> ${escapeHtml(m.phone || 'N/A')}</div>
+                            <div style="word-break: break-all;"><i class="fas fa-envelope" style="width: 16px; color: var(--text-muted);"></i> ${escapeHtml(m.email)}</div>
+                        </div>
+                    </div>
+                `).join('')}
             </div>
         </div>
 

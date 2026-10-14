@@ -56,9 +56,13 @@ CREATE TABLE IF NOT EXISTS team_members (
     phone TEXT NOT NULL,
     year TEXT NOT NULL,
     department TEXT NOT NULL,
+    section TEXT,
     college TEXT NOT NULL,
     is_leader INT DEFAULT 0
 );
+
+-- Migration safety for existing installations
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS section TEXT;
 
 -- 5. Announcements Table
 CREATE TABLE IF NOT EXISTS announcements (

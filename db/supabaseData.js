@@ -420,6 +420,102 @@ async function revealTeamProblemStatement(teamId) {
     };
 }
 
+async function getTeamMembers(teamId) {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('is_leader', { ascending: false })
+        .order('id', { ascending: true });
+    if (error) {
+        console.error('Error fetching team members:', error);
+        return [];
+    }
+    return data || [];
+}
+
+async function updateTeamMembersInSupabase(teamId, leader, teammates = []) {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+
+    const totalSize = 1 + (Array.isArray(teammates) ? teammates.length : 0);
+
+    // 1. Update team table with lead email & size
+    const { error: teamUpdateErr } = await supabase
+        .from('teams')
+        .update({
+            team_lead_email: (leader.email || '').trim().toLowerCase(),
+            team_size: totalSize
+        })
+        .eq('id', teamId);
+
+    if (teamUpdateErr) throw teamUpdateErr;
+
+    // Helper to format department with section cleanly
+    const formatDept = (dept, sec) => {
+        const d = (dept || 'AI&DS').trim();
+        const s = (sec || '').trim().toUpperCase();
+        if (!s) return d;
+        if (d.toUpperCase().includes('SEC')) return d;
+        return `${d} (Sec ${s})`;
+    };
+
+    // 2. Build member rows
+    const baseMembers = [
+        {
+            team_id: teamId,
+            name: (leader.name || '').trim(),
+            email: (leader.email || '').trim().toLowerCase(),
+            phone: (leader.phone || '').trim(),
+            department: formatDept(leader.department, leader.section),
+            year: leader.year || '3rd Year',
+            college: leader.college || 'V.S.B. Engineering College, Karur',
+            is_leader: 1
+        },
+        ...teammates.map(tm => ({
+            team_id: teamId,
+            name: (tm.name || '').trim(),
+            email: (tm.email || '').trim().toLowerCase(),
+            phone: (tm.phone || '').trim(),
+            department: formatDept(tm.department, tm.section),
+            year: tm.year || '3rd Year',
+            college: tm.college || 'V.S.B. Engineering College, Karur',
+            is_leader: 0
+        }))
+    ];
+
+    // Try with section column if present in table
+    const membersWithSection = baseMembers.map((m, idx) => {
+        const sec = idx === 0 
+            ? (leader.section || '').trim().toUpperCase() 
+            : ((teammates[idx - 1] && teammates[idx - 1].section) || '').trim().toUpperCase();
+        return { ...m, section: sec };
+    });
+
+    // 3. Atomically replace members: delete old, insert new
+    await supabase.from('team_members').delete().eq('team_id', teamId);
+
+    // Try inserting with section column
+    const { error: insertWithSecErr } = await supabase.from('team_members').insert(membersWithSection);
+    if (insertWithSecErr) {
+        // If section column doesn't exist, fall back to baseMembers (where section is in department)
+        const { error: fallbackErr } = await supabase.from('team_members').insert(baseMembers);
+        if (fallbackErr) throw fallbackErr;
+    }
+
+    // 4. Return updated members list
+    const { data: updatedMembers } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('team_id', teamId)
+        .order('is_leader', { ascending: false })
+        .order('id', { ascending: true });
+
+    return updatedMembers || [];
+}
+
 // ==========================================
 // 4. ALLOCATION ALGORITHM IN SUPABASE
 // ==========================================
@@ -927,6 +1023,8 @@ module.exports = {
     findTeamForLogin,
     updateTeamPassword,
     getTeamDashboardData,
+    getTeamMembers,
+    updateTeamMembersInSupabase,
     revealTeamProblemStatement,
     updateTeamSubmission,
     allocateShuffledProblemStatementInSupabase,

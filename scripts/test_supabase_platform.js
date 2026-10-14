@@ -115,13 +115,57 @@ async function run() {
         testTeamToken = res.data.token;
     });
 
-    // 7. Team Dashboard via Supabase
-    await test('Team API: Dashboard retrieves team data from Supabase', async () => {
+    // 7. Save Team Members via Supabase
+    await test('Team API: Save leader & teammates to Supabase (/api/team/members)', async () => {
+        const payload = {
+            leader: {
+                name: 'Test Leader SY99',
+                department: 'AI & DS',
+                section: 'A',
+                phone: '9876543210',
+                email: 'test@synapse.vsb.edu.in'
+            },
+            teammates: [
+                {
+                    name: 'Teammate Alpha',
+                    department: 'AI & DS',
+                    section: 'A',
+                    phone: '9876543211',
+                    email: 'alpha@vsb.ac.in'
+                },
+                {
+                    name: 'Teammate Beta',
+                    department: 'AI & DS',
+                    section: 'B',
+                    phone: '9876543212',
+                    email: 'beta@vsb.ac.in'
+                }
+            ]
+        };
+
+        const res = await request('/api/team/members', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${testTeamToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.data.success, true);
+        assert.strictEqual(res.data.members.length, 3);
+    });
+
+    // 8. Team Dashboard via Supabase
+    await test('Team API: Dashboard retrieves verified members from Supabase', async () => {
         const res = await request('/api/team/dashboard', {
             headers: { 'Authorization': `Bearer ${testTeamToken}` }
         });
         assert.strictEqual(res.status, 200);
         assert.strictEqual(res.data.team.team_code, 'SY99');
+        assert.strictEqual(res.data.members.length, 3);
+        assert.strictEqual(res.data.members[0].name, 'Test Leader SY99');
     });
 
     // 8. Public announcements and schedule via Supabase
