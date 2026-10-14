@@ -356,23 +356,33 @@ router.post('/team/login', async (req, res) => {
 
         // 2. Fallback to local SQLite if Supabase not configured or team not in cloud
         const db = getDb();
-        let normalizedCode = identifier.toUpperCase().replace(/[\s-_]/g, '');
-        const numMatch = normalizedCode.match(/^(?:SYN)?(\d+)$/);
-        if (numMatch) {
-            normalizedCode = 'SYN' + numMatch[1].padStart(3, '0');
+        const trimmed = identifier.trim();
+        let normalizedCode = trimmed.toUpperCase().replace(/[\s-_]/g, '');
+        const synMatch = normalizedCode.match(/^SYN(\d+)$/);
+        if (synMatch) {
+            normalizedCode = 'SYN' + synMatch[1].padStart(3, '0');
         }
+        const syMatch = normalizedCode.match(/^SY(\d+)$/);
+        if (syMatch) {
+            normalizedCode = 'SY' + syMatch[1].padStart(2, '0');
+        }
+        const pureNum = normalizedCode.match(/^(\d{1,2})$/);
+        const altCodeSY = pureNum ? ('SY' + pureNum[1].padStart(2, '0')) : normalizedCode;
 
-        const upperIdentifier = identifier.toUpperCase();
-        const lowerIdentifier = identifier.toLowerCase();
+        const upperIdentifier = trimmed.toUpperCase();
+        const lowerIdentifier = trimmed.toLowerCase();
+        const regEmail = /^\d{6,16}$/.test(trimmed) ? `${trimmed}@vsb.ac.in`.toLowerCase() : lowerIdentifier;
 
         const team = db.prepare(`
             SELECT * FROM teams 
             WHERE UPPER(team_code) = ? 
                OR UPPER(team_code) = ? 
+               OR UPPER(team_code) = ?
                OR LOWER(team_name) = ? 
                OR LOWER(team_lead_email) = ? 
+               OR LOWER(team_lead_email) = ?
                OR id IN (SELECT team_id FROM team_members WHERE LOWER(email) = ?)
-        `).get(upperIdentifier, normalizedCode, lowerIdentifier, lowerIdentifier, lowerIdentifier);
+        `).get(upperIdentifier, normalizedCode, altCodeSY, lowerIdentifier, lowerIdentifier, regEmail, lowerIdentifier);
 
         if (!team) {
             return res.status(401).json({ error: 'Team not found. Please verify your Team ID or Lead Email.' });

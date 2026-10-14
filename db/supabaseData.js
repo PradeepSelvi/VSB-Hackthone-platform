@@ -221,27 +221,48 @@ async function findTeamForLogin(identifier) {
     const supabase = getSupabase();
     if (!supabase) return null;
 
-    let normalizedCode = identifier.toUpperCase().replace(/[\s-_]/g, '');
-    const numMatch = normalizedCode.match(/^(?:SYN)?(\d+)$/);
-    if (numMatch) {
-        normalizedCode = 'SYN' + numMatch[1].padStart(3, '0');
+    const trimmed = (identifier || '').trim();
+    let normalizedCode = trimmed.toUpperCase().replace(/[\s-_]/g, '');
+
+    // Normalize SYN001 or SY01
+    const synMatch = normalizedCode.match(/^SYN(\d+)$/);
+    if (synMatch) {
+        normalizedCode = 'SYN' + synMatch[1].padStart(3, '0');
     }
+    const syMatch = normalizedCode.match(/^SY(\d+)$/);
+    if (syMatch) {
+        normalizedCode = 'SY' + syMatch[1].padStart(2, '0');
+    }
+    // Also if single/double digit entered directly (e.g. 1 or 01), check SY format
+    const pureNum = normalizedCode.match(/^(\d{1,2})$/);
+    let altCodeSY = pureNum ? ('SY' + pureNum[1].padStart(2, '0')) : normalizedCode;
+    let altCodeSYN = pureNum ? ('SYN' + pureNum[1].padStart(3, '0')) : normalizedCode;
 
     // 1. Direct match on team_code, team_name, or team_lead_email
     const { data: teams, error } = await supabase
         .from('teams')
         .select('*')
-        .or(`team_code.ilike.${normalizedCode},team_code.ilike.${identifier},team_lead_email.ilike.${identifier},team_name.ilike.${identifier}`);
+        .or(`team_code.ilike.${normalizedCode},team_code.ilike.${altCodeSY},team_code.ilike.${altCodeSYN},team_code.ilike.${trimmed},team_lead_email.ilike.${trimmed},team_name.ilike.${trimmed}`);
 
     if (teams && teams.length > 0) {
         return teams[0];
+    }
+
+    // Also match if identifier is leader regNo directly (e.g. 922525148100)
+    if (/^\d{6,16}$/.test(trimmed)) {
+        const { data: regTeams } = await supabase
+            .from('teams')
+            .select('*')
+            .ilike('team_lead_email', `${trimmed}@vsb.ac.in`)
+            .limit(1);
+        if (regTeams && regTeams.length > 0) return regTeams[0];
     }
 
     // 2. Check if identifier is any member's email
     const { data: memberMatches } = await supabase
         .from('team_members')
         .select('team_id')
-        .ilike('email', identifier)
+        .ilike('email', trimmed)
         .limit(1);
 
     if (memberMatches && memberMatches.length > 0) {
