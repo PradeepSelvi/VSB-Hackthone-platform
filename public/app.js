@@ -1293,40 +1293,6 @@ function renderTeamDashboard(data) {
             </div>
         `}
 
-        <!-- Team Roster -->
-        <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
-            <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-users" style="color: var(--accent-secondary);"></i> Registered Team Members (${data.members.length})
-            </h5>
-            <div style="overflow-x: auto;">
-                <table class="team-members-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Phone</th>
-                            <th>Dept / Year</th>
-                            <th>College</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${data.members.map(m => `
-                            <tr>
-                                <td>
-                                    <strong>${escapeHtml(m.name)}</strong>
-                                    ${m.is_leader ? '<span class="leader-badge"><i class="fas fa-crown"></i> Leader</span>' : ''}
-                                </td>
-                                <td>${escapeHtml(m.email)}</td>
-                                <td>${escapeHtml(m.phone)}</td>
-                                <td>${escapeHtml(m.department)} | ${escapeHtml(m.year)}</td>
-                                <td>${escapeHtml(m.college)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
         <!-- Live Announcements from Admin -->
         <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
             <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -1346,35 +1312,6 @@ function renderTeamDashboard(data) {
                 </div>
             ` : `
                 <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);"><i class="fas fa-info-circle"></i> No announcements posted yet. Real-time updates from organizers will appear here.</p>
-            `}
-        </div>
-
-        <!-- Event Timeline & Milestones -->
-        <div style="background: rgba(20,20,35,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--border-radius); padding: 1.25rem; margin-bottom: 1.5rem;">
-            <h5 style="font-family: var(--font-display); font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
-                <i class="fas fa-calendar-alt" style="color: var(--accent-secondary);"></i> 24-Hour Event Schedule & Milestones
-            </h5>
-            ${(data.schedule && data.schedule.length > 0) ? `
-                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem;">
-                    ${data.schedule.map(s => {
-                        const startTime = formatTime(s.start_time);
-                        const endTime = s.end_time ? formatTime(s.end_time) : '';
-                        const timeStr = endTime ? `${startTime} - ${endTime}` : startTime;
-                        return `
-                        <div style="background: rgba(10,10,20,0.5); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
-                                <span class="event-type-badge badge-${escapeHtml(s.event_type)}" style="font-size: 0.65rem; padding: 0.15rem 0.5rem;">${escapeHtml(s.event_type)}</span>
-                                <span style="font-size: 0.75rem; color: var(--accent-cyan); font-family: var(--font-mono);">${timeStr}</span>
-                            </div>
-                            <strong style="display: block; font-size: 0.85rem; color: var(--text-primary); margin-bottom: 0.2rem;">${escapeHtml(s.title)}</strong>
-                            ${s.description ? `<p style="margin: 0 0 0.3rem 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.4;">${escapeHtml(s.description)}</p>` : ''}
-                            <span style="font-size: 0.72rem; color: var(--text-muted); display: block;"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(s.location || 'Venue')}</span>
-                        </div>
-                        `;
-                    }).join('')}
-                </div>
-            ` : `
-                <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Schedule details will appear here.</p>
             `}
         </div>
 
