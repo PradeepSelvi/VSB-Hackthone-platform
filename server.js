@@ -23,6 +23,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Favicon handler
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'logo.jpg'));
+});
+
 // API Routes
 app.use('/api/admin', adminRoutes);
 app.use('/api', publicRoutes);

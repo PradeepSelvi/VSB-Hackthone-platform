@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="icon" type="image/jpeg" href="logo.jpg">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -182,6 +183,20 @@
 
     <!-- Page: Problems -->
     <div id="page-problems" class="page-view">
+        <!-- Problem Statements Running Marquee Banner (Bigger size for Problems page) -->
+        <div class="ps-ticker-bar ps-ticker-lg" id="psTickerBarProblems">
+            <div class="ps-ticker-label">
+                <span class="ps-ticker-pulse"></span>
+                <i class="fas fa-bullhorn"></i>
+                <span class="ticker-label-text">OFFICIAL CHALLENGES</span>
+            </div>
+            <div class="ps-ticker-viewport" id="psTickerViewportProblems">
+                <div class="ps-ticker-content" id="psTickerContentProblems">
+                    <span class="ps-ticker-item">📌 Loading Problem Statements...</span>
+                </div>
+            </div>
+        </div>
+
         <section class="section" id="problems">
             <div class="container">
                 <div class="section-header">

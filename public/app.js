@@ -433,12 +433,18 @@ function renderSchedule(schedule) {
 
 // ====== Problem Statements Running Marquee Ticker ======
 function renderProblemTicker(problems) {
-    const track = document.getElementById('psTickerContent');
-    if (!track) return;
+    const tracks = [
+        document.getElementById('psTickerContent'),
+        document.getElementById('psTickerContentProblems')
+    ].filter(Boolean);
+
+    if (!tracks.length) return;
     if (!problems || !problems.length) {
-        track.innerHTML = `
-            <span class="ps-ticker-item">📌 Problem Statements will be announced shortly! Stay tuned!</span>
-        `;
+        tracks.forEach(track => {
+            track.innerHTML = `
+                <span class="ps-ticker-item">📌 Problem Statements will be announced shortly! Stay tuned!</span>
+            `;
+        });
         return;
     }
 
@@ -458,13 +464,14 @@ function renderProblemTicker(problems) {
         `;
     }).join('');
 
-    // Duplicate content twice to create a seamless infinite loop
-    track.innerHTML = itemsHtml + itemsHtml;
-
-    // Dynamically adjust animation speed according to item count and text length for comfortable reading
     const totalItems = problems.length * 2;
     const scrollSec = Math.max(90, Math.round(totalItems * 6.5));
-    track.style.animationDuration = `${scrollSec}s`;
+
+    tracks.forEach(track => {
+        // Duplicate content twice to create a seamless infinite loop
+        track.innerHTML = itemsHtml + itemsHtml;
+        track.style.animationDuration = `${scrollSec}s`;
+    });
 }
 
 function handleTickerPSClick(id) {
@@ -1168,8 +1175,9 @@ async function loadTeamDashboard() {
         const res = await fetch(`${API_BASE}/team/dashboard`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
             localStorage.removeItem('synapse_team_token');
+            localStorage.removeItem('synapse_team_info');
             return renderTeamLoginForm();
         }
         const data = await res.json();
