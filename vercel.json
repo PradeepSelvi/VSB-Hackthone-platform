@@ -9,6 +9,10 @@
     {
       "source": "/admin",
       "destination": "/admin.html"
+    },
+    {
+      "source": "/((?!api|admin|favicon.ico|.*\\..*).*)",
+      "destination": "/index.html"
     }
   ]
 }
